@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import Teams from './pages/Teams.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import Players from './pages/Players.jsx'
+import PlayerDetail from './pages/PlayerDetail.jsx'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/teams" element={<Teams />} />
         <Route path="/my-team" element={<MyTeam />} />
         <Route path="/players" element={<Players />} />
+        <Route path="/players/:playerId" element={<PlayerDetail />} />
       </Routes>
     </div>
   )

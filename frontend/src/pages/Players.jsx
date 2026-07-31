@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const API = 'https://api.dynastylr.site'
 
 export default function Players() {
+  const navigate = useNavigate()
   const [players, setPlayers] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -50,7 +52,11 @@ export default function Players() {
         </thead>
         <tbody>
           {filtered.slice(0, 100).map(p => (
-            <tr key={p.player_id} style={{ borderBottom: '1px solid #ddd' }}>
+            <tr
+              key={p.player_id}
+              onClick={() => navigate(`/players/${p.player_id}`)}
+              style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
+            >
               <td style={{ padding: '10px' }}>{p.full_name}</td>
               <td style={{ padding: '10px' }}>{p.position}</td>
               <td style={{ padding: '10px' }}>{p.team || 'FA'}</td>
