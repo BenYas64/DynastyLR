@@ -24,7 +24,7 @@ def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="re
     try:
         for season in range(start_season, end_season + 1):
             for week in weeks_in_season(season):
-                url = f"https://api.sleeper.app/v1/stats/nfl/{season}/{week}?season_type={season_type}"
+                url = f"https://api.sleeper.app/v1/stats/nfl/{season_type}/{season}/{week}"
                 resp = requests.get(url, timeout=20)
                 if resp.status_code != 200:
                     continue
