@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
 export default function Account() {
+  const { user, setUser, leagues, setLeagues, selectedLeagueId, setSelectedLeagueId } = useAccount()
   const [input, setInput] = useState('')
-  const [user, setUser] = useState(null)
   const [error, setError] = useState(null)
 
   const handleSubmit = (e) => {
@@ -15,9 +16,18 @@ export default function Account() {
         if (!r.ok) throw new Error('No user found with that name')
         return r.json()
       })
-      .then(data => setUser(data))
+      .then(userData => {
+        setUser(userData)
+        return fetch(`${API}/leagues/${userData.user_id}`).then(r => r.json())
+      })
+      .then(leaguesData => {
+        setLeagues(leaguesData || [])
+        setSelectedLeagueId(leaguesData?.[0]?.league_id || null)
+      })
       .catch(err => {
         setUser(null)
+        setLeagues([])
+        setSelectedLeagueId(null)
         setError(err.message)
       })
   }
@@ -29,6 +39,24 @@ export default function Account() {
       {user ? (
         <div>
           <p>Signed in as <strong>{user.display_name}</strong></p>
+
+          <label htmlFor="league-select" style={{ display: 'block', marginTop: '15px', marginBottom: '5px' }}>
+            League
+          </label>
+          {leagues.length === 0 ? (
+            <p>No leagues found for this user.</p>
+          ) : (
+            <select
+              id="league-select"
+              value={selectedLeagueId || ''}
+              onChange={e => setSelectedLeagueId(e.target.value)}
+              style={{ padding: '8px', width: '300px', fontSize: '16px' }}
+            >
+              {leagues.map(l => (
+                <option key={l.league_id} value={l.league_id}>{l.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>

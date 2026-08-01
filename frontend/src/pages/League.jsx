@@ -1,42 +1,40 @@
 import { useEffect, useState } from 'react'
+import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
-export default function Teams() {
+export default function League() {
+  const { selectedLeagueId } = useAccount()
   const [rosters, setRosters] = useState([])
   const [users, setUsers] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetch(`${API}/user/CoolBen9880`)
-      .then(r => r.json())
-      .then(user => {
-        return fetch(`${API}/leagues/${user.user_id}`)
-          .then(r => r.json())
-          .then(leagues => {
-            if (!leagues || leagues.length === 0) throw new Error('No leagues found')
-            const league = leagues[0]
-            return Promise.all([
-              fetch(`${API}/league/${league.league_id}/rosters`).then(r => r.json()),
-              fetch(`${API}/league/${league.league_id}/users`).then(r => r.json())
-            ])
-          })
-      })
-      .then(([rostersData, usersData]) => {
-        const userMap = {}
-        usersData.forEach(u => userMap[u.user_id] = u)
-        setRosters(rostersData)
-        setUsers(userMap)
-        setLoading(false)
-      })
-      .catch(err => {
-        setError(err.message)
-        setLoading(false)
-      })
-  }, [])
+    if (!selectedLeagueId) return
+    setLoading(true)
+    setError(null)
+    Promise.all([
+      fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
+      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json())
+    ]).then(([rostersData, usersData]) => {
+      const userMap = {}
+      usersData.forEach(u => userMap[u.user_id] = u)
+      setRosters(rostersData)
+      setUsers(userMap)
+      setLoading(false)
+    }).catch(err => {
+      setError(err.message)
+      setLoading(false)
+    })
+  }, [selectedLeagueId])
 
-  if (loading) return <p style={{ padding: '20px' }}>Loading teams...</p>
+  if (!selectedLeagueId) return (
+    <p style={{ padding: '20px' }}>
+      Sign in and select a league on the Account page to view standings.
+    </p>
+  )
+  if (loading) return <p style={{ padding: '20px' }}>Loading league...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
   if (rosters.length === 0) return <p style={{ padding: '20px' }}>No rosters found.</p>
 

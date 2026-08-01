@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react'
+import { useAccount } from '../AccountContext.jsx'
 
-const LEAGUE_ID = '1180188202559705088' // WCXC Dynasty
-const MY_USERNAME = 'CoolBen9880'
 const API = 'https://api.dynastylr.site'
 
 export default function MyTeam() {
+  const { user, selectedLeagueId } = useAccount()
   const [roster, setRoster] = useState(null)
   const [players, setPlayers] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!user || !selectedLeagueId) return
+    setLoading(true)
     Promise.all([
-      fetch(`${API}/user/${MY_USERNAME}`).then(r => r.json()),
-      fetch(`${API}/league/${LEAGUE_ID}/rosters`).then(r => r.json()),
+      fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
       fetch(`${API}/players`).then(r => r.json())
-    ]).then(([user, rosters, playersData]) => {
+    ]).then(([rosters, playersData]) => {
       const myRoster = rosters.find(r => r.owner_id === user.user_id)
       const playersMap = {}
       playersData.forEach(p => { playersMap[p.player_id] = p })
@@ -22,8 +23,13 @@ export default function MyTeam() {
       setPlayers(playersMap)
       setLoading(false)
     })
-  }, [])
+  }, [user, selectedLeagueId])
 
+  if (!user || !selectedLeagueId) return (
+    <p style={{ padding: '20px' }}>
+      Sign in and select a league on the Account page to view your team.
+    </p>
+  )
   if (loading) return <p style={{ padding: '20px' }}>Loading your team...</p>
   if (!roster) return <p style={{ padding: '20px' }}>No roster found.</p>
 
