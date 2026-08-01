@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
 export default function League() {
   const { selectedLeagueId } = useAccount()
+  const navigate = useNavigate()
   const [rosters, setRosters] = useState([])
   const [users, setUsers] = useState({})
   const [loading, setLoading] = useState(false)
@@ -57,7 +59,11 @@ export default function League() {
           {sorted.map((roster, i) => {
             const user = users[roster.owner_id]
             return (
-              <tr key={roster.roster_id} style={{ borderBottom: '1px solid #ddd' }}>
+              <tr
+                key={roster.roster_id}
+                onClick={() => navigate(`/league/${selectedLeagueId}/roster/${roster.roster_id}`)}
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
+              >
                 <td style={{ padding: '10px' }}>{i + 1}</td>
                 <td style={{ padding: '10px' }}>{user?.display_name || 'Unknown'}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.wins}</td>

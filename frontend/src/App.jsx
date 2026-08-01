@@ -4,6 +4,7 @@ import MyTeam from './pages/MyTeam.jsx'
 import Players from './pages/Players.jsx'
 import PlayerDetail from './pages/PlayerDetail.jsx'
 import Account from './pages/Account.jsx'
+import TeamRoster from './pages/TeamRoster.jsx'
 import { AccountProvider } from './AccountContext.jsx'
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
           <Route path="/players" element={<Players />} />
           <Route path="/players/:playerId" element={<PlayerDetail />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/league/:leagueId/roster/:rosterId" element={<TeamRoster />} />
         </Routes>
       </div>
     </AccountProvider>
