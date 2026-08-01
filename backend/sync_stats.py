@@ -1,4 +1,5 @@
 import requests
+from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Stat
 
 START_SEASON = 2017
@@ -24,7 +25,7 @@ def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="re
         for season in range(start_season, end_season + 1):
             for week in weeks_in_season(season):
                 url = f"https://api.sleeper.app/v1/stats/nfl/{season}/{week}?season_type={season_type}"
-                resp = requests.get(url)
+                resp = requests.get(url, timeout=20)
                 if resp.status_code != 200:
                     continue
 
@@ -32,30 +33,27 @@ def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="re
                 if not data:
                     continue
 
-                for player_id, s in data.items():
-                    stat = db.query(Stat).filter(
-                        Stat.player_id == player_id,
-                        Stat.season == season,
-                        Stat.week == week,
-                        Stat.season_type == season_type,
-                    ).first()
+                rows = [
+                    {
+                        "player_id": player_id,
+                        "season": season,
+                        "week": week,
+                        "season_type": season_type,
+                        **{field: s.get(field) for field in STAT_FIELDS},
+                    }
+                    for player_id, s in data.items()
+                ]
 
-                    if not stat:
-                        stat = Stat(
-                            player_id=player_id,
-                            season=season,
-                            week=week,
-                            season_type=season_type,
-                        )
-                        db.add(stat)
+                stmt = insert(Stat).values(rows)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["player_id", "season", "week", "season_type"],
+                    set_={field: stmt.excluded[field] for field in STAT_FIELDS},
+                )
+                db.execute(stmt)
+                db.commit()
 
-                    for field in STAT_FIELDS:
-                        setattr(stat, field, s.get(field))
-
-                total += len(data)
-                print(f"{season} week {week}: {len(data)} players")
-
-            db.commit()
+                total += len(rows)
+                print(f"{season} week {week}: {len(rows)} players")
 
         print(f"Synced {total} stat rows")
     except Exception as e:
