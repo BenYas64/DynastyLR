@@ -78,8 +78,8 @@ class Stat(Base):
     rec_tgt = Column(Integer)
     fum_lost = Column(Integer)
 
-class SleeperUser(Base):
-    __tablename__ = "sleeper_users"
+class User(Base):
+    __tablename__ = "users"
     user_id = Column(String, primary_key=True)
     username = Column(String)
     display_name = Column(String)
@@ -92,12 +92,6 @@ class League(Base):
     season = Column(Integer)
     status = Column(String)
     total_rosters = Column(Integer)
-
-class UserLeague(Base):
-    __tablename__ = "user_leagues"
-    user_id = Column(String, primary_key=True)
-    league_id = Column(String, primary_key=True)
-    season = Column(Integer)
 
 class Roster(Base):
     __tablename__ = "rosters"

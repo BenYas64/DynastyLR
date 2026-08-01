@@ -2,7 +2,7 @@ import json
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, SleeperUser, League, UserLeague, Roster, LeagueUser, Matchup
+from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup
 
 app = FastAPI()
 
@@ -44,8 +44,8 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
 def get_leagues(user_id: str, season: int = 2025, db: Session = Depends(get_db)):
     leagues = (
         db.query(League)
-        .join(UserLeague, UserLeague.league_id == League.league_id)
-        .filter(UserLeague.user_id == user_id, League.season == season)
+        .join(LeagueUser, LeagueUser.league_id == League.league_id)
+        .filter(LeagueUser.user_id == user_id, League.season == season)
         .all()
     )
     return leagues
@@ -84,14 +84,14 @@ def get_users(league_id: str, db: Session = Depends(get_db)):
 
 @app.get("/user/{username}")
 def get_user(username: str, db: Session = Depends(get_db)):
-    user = db.query(SleeperUser).filter(SleeperUser.username.ilike(username)).first()
+    user = db.query(User).filter(User.username.ilike(username)).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not synced yet — run sync_leagues.py")
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @app.get("/account/{display_name}")
 def get_account(display_name: str, db: Session = Depends(get_db)):
-    user = db.query(SleeperUser).filter(SleeperUser.display_name.ilike(display_name)).first()
+    user = db.query(User).filter(User.display_name.ilike(display_name)).first()
     if not user:
         raise HTTPException(status_code=404, detail="No user with that display name")
     return user
