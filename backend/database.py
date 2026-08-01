@@ -53,6 +53,31 @@ class Player(Base):
     news_updated = Column(String)
     team_changed_at = Column(String)
 
+class Stat(Base):
+    __tablename__ = "stats"
+    player_id = Column(String, primary_key=True)
+    season = Column(Integer, primary_key=True)
+    week = Column(Integer, primary_key=True)
+    season_type = Column(String, primary_key=True, default="regular")
+    team = Column(String)
+    opponent = Column(String)
+    pts_ppr = Column(Float)
+    pts_half_ppr = Column(Float)
+    pts_std = Column(Float)
+    pass_att = Column(Integer)
+    pass_cmp = Column(Integer)
+    pass_yd = Column(Integer)
+    pass_td = Column(Integer)
+    pass_int = Column(Integer)
+    rush_att = Column(Integer)
+    rush_yd = Column(Integer)
+    rush_td = Column(Integer)
+    rec = Column(Integer)
+    rec_yd = Column(Integer)
+    rec_td = Column(Integer)
+    rec_tgt = Column(Integer)
+    fum_lost = Column(Integer)
+
 class Roster(Base):
     __tablename__ = "rosters"
     roster_id = Column(Integer, primary_key=True)

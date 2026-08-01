@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import requests
-from database import get_db, Player
+from database import get_db, Player, Stat
 
 app = FastAPI()
 
@@ -35,7 +35,10 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
     player = db.query(Player).filter(Player.player_id == player_id).first()
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    return player
+    stats = db.query(Stat).filter(Stat.player_id == player_id).order_by(
+        Stat.season.desc(), Stat.week.desc()
+    ).all()
+    return {"player": player, "stats": stats}
 
 @app.get("/leagues/{user_id}")
 def get_leagues(user_id: str):
