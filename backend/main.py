@@ -1,8 +1,8 @@
+import json
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-import requests
-from database import get_db, Player, Stat
+from database import get_db, Player, Stat, SleeperUser, League, UserLeague, Roster, LeagueUser, Matchup
 
 app = FastAPI()
 
@@ -41,26 +41,50 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
     return {"player": player, "stats": stats}
 
 @app.get("/leagues/{user_id}")
-def get_leagues(user_id: str):
-    response = requests.get(f"https://api.sleeper.app/v1/user/{user_id}/leagues/nfl/2025")
-    return response.json()
+def get_leagues(user_id: str, season: int = 2025, db: Session = Depends(get_db)):
+    leagues = (
+        db.query(League)
+        .join(UserLeague, UserLeague.league_id == League.league_id)
+        .filter(UserLeague.user_id == user_id, League.season == season)
+        .all()
+    )
+    return leagues
 
 @app.get("/league/{league_id}/rosters")
-def get_rosters(league_id: str):
-    response = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/rosters")
-    return response.json()
+def get_rosters(league_id: str, db: Session = Depends(get_db)):
+    rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
+    return [
+        {
+            "roster_id": r.roster_id,
+            "owner_id": r.owner_id,
+            "league_id": r.league_id,
+            "players": json.loads(r.players) if r.players else [],
+            "starters": json.loads(r.starters) if r.starters else [],
+            "settings": {"wins": r.wins, "losses": r.losses, "fpts": r.fpts},
+        }
+        for r in rosters
+    ]
 
 @app.get("/league/{league_id}/matchups/{week}")
-def get_matchups(league_id: str, week: int):
-    response = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/matchups/{week}")
-    return response.json()
+def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
+    matchups = db.query(Matchup).filter(Matchup.league_id == league_id, Matchup.week == week).all()
+    return [
+        {
+            "roster_id": m.roster_id,
+            "matchup_id": m.matchup_id,
+            "points": m.points,
+            "players": json.loads(m.players) if m.players else [],
+        }
+        for m in matchups
+    ]
 
 @app.get("/league/{league_id}/users")
-def get_users(league_id: str):
-    response = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/users")
-    return response.json()
+def get_users(league_id: str, db: Session = Depends(get_db)):
+    return db.query(LeagueUser).filter(LeagueUser.league_id == league_id).all()
 
 @app.get("/user/{username}")
-def get_user(username: str):
-    response = requests.get(f"https://api.sleeper.app/v1/user/{username}")
-    return response.json()
+def get_user(username: str, db: Session = Depends(get_db)):
+    user = db.query(SleeperUser).filter(SleeperUser.username.ilike(username)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not synced yet — run sync_leagues.py")
+    return user

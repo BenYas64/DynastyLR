@@ -78,11 +78,32 @@ class Stat(Base):
     rec_tgt = Column(Integer)
     fum_lost = Column(Integer)
 
+class SleeperUser(Base):
+    __tablename__ = "sleeper_users"
+    user_id = Column(String, primary_key=True)
+    username = Column(String)
+    display_name = Column(String)
+    avatar = Column(String)
+
+class League(Base):
+    __tablename__ = "leagues"
+    league_id = Column(String, primary_key=True)
+    name = Column(String)
+    season = Column(Integer)
+    status = Column(String)
+    total_rosters = Column(Integer)
+
+class UserLeague(Base):
+    __tablename__ = "user_leagues"
+    user_id = Column(String, primary_key=True)
+    league_id = Column(String, primary_key=True)
+    season = Column(Integer)
+
 class Roster(Base):
     __tablename__ = "rosters"
+    league_id = Column(String, primary_key=True)
     roster_id = Column(Integer, primary_key=True)
     owner_id = Column(String)
-    league_id = Column(String)
     wins = Column(Integer)
     losses = Column(Integer)
     fpts = Column(Float)
@@ -91,10 +112,19 @@ class Roster(Base):
 
 class LeagueUser(Base):
     __tablename__ = "league_users"
+    league_id = Column(String, primary_key=True)
     user_id = Column(String, primary_key=True)
     username = Column(String)
     display_name = Column(String)
-    league_id = Column(String)
+
+class Matchup(Base):
+    __tablename__ = "matchups"
+    league_id = Column(String, primary_key=True)
+    week = Column(Integer, primary_key=True)
+    roster_id = Column(Integer, primary_key=True)
+    matchup_id = Column(Integer)
+    points = Column(Float)
+    players = Column(Text)
 
 def init_db():
     Base.metadata.create_all(bind=engine)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const LEAGUE_ID = '1048532812534386688'
+const LEAGUE_ID = '1180188202559705088' // WCXC Dynasty
 const MY_USERNAME = 'CoolBen9880'
 const API = 'https://api.dynastylr.site'
 
@@ -13,11 +13,13 @@ export default function MyTeam() {
     Promise.all([
       fetch(`${API}/user/${MY_USERNAME}`).then(r => r.json()),
       fetch(`${API}/league/${LEAGUE_ID}/rosters`).then(r => r.json()),
-      fetch('https://api.sleeper.app/v1/players/nfl').then(r => r.json())
+      fetch(`${API}/players`).then(r => r.json())
     ]).then(([user, rosters, playersData]) => {
       const myRoster = rosters.find(r => r.owner_id === user.user_id)
+      const playersMap = {}
+      playersData.forEach(p => { playersMap[p.player_id] = p })
       setRoster(myRoster)
-      setPlayers(playersData)
+      setPlayers(playersMap)
       setLoading(false)
     })
   }, [])
