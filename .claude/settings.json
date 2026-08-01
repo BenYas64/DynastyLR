@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl -s --max-time 10 \"https://api.dynastylr.site/user/CoolBen9880\")",
+      "Bash(curl -s \"https://api.dynastylr.site/league/1180188202559705088/rosters\" --max-time 10)",
+      "Bash(curl -s \"https://api.dynastylr.site/league/1180188202559705088/users\" --max-time 10)"
+    ]
+  }
+}

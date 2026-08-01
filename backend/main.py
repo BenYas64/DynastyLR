@@ -88,3 +88,10 @@ def get_user(username: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not synced yet — run sync_leagues.py")
     return user
+
+@app.get("/account/{display_name}")
+def get_account(display_name: str, db: Session = Depends(get_db)):
+    user = db.query(SleeperUser).filter(SleeperUser.display_name.ilike(display_name)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="No user with that display name")
+    return user
