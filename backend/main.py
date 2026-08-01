@@ -58,12 +58,21 @@ def get_rosters(league_id: str, db: Session = Depends(get_db)):
             "roster_id": r.roster_id,
             "owner_id": r.owner_id,
             "league_id": r.league_id,
-            "players": json.loads(r.players) if r.players else [],
-            "starters": json.loads(r.starters) if r.starters else [],
+            "players": r.players or [],
+            "starters": r.starters or [],
             "settings": {"wins": r.wins, "losses": r.losses, "fpts": r.fpts},
         }
         for r in rosters
     ]
+
+@app.get("/league/{league_id}/rostered-players")
+def get_rostered_players(league_id: str, db: Session = Depends(get_db)):
+    rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
+    player_ids = set()
+    for r in rosters:
+        if r.players:
+            player_ids.update(r.players)
+    return sorted(player_ids)
 
 @app.get("/league/{league_id}/matchups/{week}")
 def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):

@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
 export default function Players() {
   const navigate = useNavigate()
+  const { selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [filterMode, setFilterMode] = useState('all') // 'all' | 'available'
+  const [rosteredIds, setRosteredIds] = useState(null)
 
   useEffect(() => {
     fetch(`${API}/players`)
@@ -23,23 +27,75 @@ export default function Players() {
       })
   }, [])
 
+  useEffect(() => {
+    if (filterMode !== 'available' || !selectedLeagueId) return
+    fetch(`${API}/league/${selectedLeagueId}/rostered-players`)
+      .then(r => r.json())
+      .then(ids => setRosteredIds(new Set(ids)))
+      .catch(() => setRosteredIds(new Set()))
+  }, [filterMode, selectedLeagueId])
+
   if (loading) return <p style={{ padding: '20px' }}>Loading players...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
 
-  const filtered = players.filter(p =>
-    `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const showAvailableOnly = filterMode === 'available' && selectedLeagueId && rosteredIds
+
+  const filtered = players
+    .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(p => !showAvailableOnly || !rosteredIds.has(p.player_id))
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Players ({players.length} total)</h2>
-      <input
-        type="text"
-        placeholder="Search players..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        style={{ padding: '8px', width: '300px', marginBottom: '20px', fontSize: '16px' }}
-      />
+
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Search players..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ padding: '8px', width: '300px', fontSize: '16px' }}
+        />
+
+        <div style={{ display: 'inline-flex', border: '1px solid #ccc', borderRadius: '20px', overflow: 'hidden' }}>
+          <button
+            onClick={() => setFilterMode('all')}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              border: 'none',
+              cursor: 'pointer',
+              background: filterMode === 'all' ? '#1a1a2e' : '#fff',
+              color: filterMode === 'all' ? '#fff' : '#333',
+            }}
+          >
+            All Players
+          </button>
+          <button
+            onClick={() => setFilterMode('available')}
+            disabled={!selectedLeagueId}
+            title={!selectedLeagueId ? 'Sign in and select a league on the Account page first' : ''}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              border: 'none',
+              cursor: selectedLeagueId ? 'pointer' : 'not-allowed',
+              background: filterMode === 'available' ? '#1a1a2e' : '#fff',
+              color: filterMode === 'available' ? '#fff' : (selectedLeagueId ? '#333' : '#aaa'),
+            }}
+          >
+            Available Players
+          </button>
+        </div>
+      </div>
+
+      {filterMode === 'available' && !selectedLeagueId && (
+        <p style={{ color: '#666' }}>Sign in and select a league on the Account page to filter available players.</p>
+      )}
+      {filterMode === 'available' && selectedLeagueId && !rosteredIds && (
+        <p>Loading rosters...</p>
+      )}
+
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>

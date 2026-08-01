@@ -1,4 +1,5 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -101,8 +102,8 @@ class Roster(Base):
     wins = Column(Integer)
     losses = Column(Integer)
     fpts = Column(Float)
-    players = Column(Text)
-    starters = Column(Text)
+    players = Column(JSONB)
+    starters = Column(JSONB)
 
 class LeagueUser(Base):
     __tablename__ = "league_users"
