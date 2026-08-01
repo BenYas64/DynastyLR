@@ -4,7 +4,7 @@ import { useAccount } from '../AccountContext.jsx'
 const API = 'https://api.dynastylr.site'
 
 export default function Account() {
-  const { user, setUser, leagues, setLeagues, selectedLeagueId, setSelectedLeagueId } = useAccount()
+  const { user, setUser, leagues, setLeagues, selectedLeagueId, setSelectedLeagueId, signOut } = useAccount()
   const [input, setInput] = useState('')
   const [error, setError] = useState(null)
 
@@ -57,6 +57,15 @@ export default function Account() {
               ))}
             </select>
           )}
+
+          <div>
+            <button
+              onClick={signOut}
+              style={{ padding: '8px 16px', fontSize: '16px', marginTop: '20px' }}
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
