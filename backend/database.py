@@ -54,7 +54,7 @@ class Player(Base):
     team_changed_at = Column(String)
 
 class Stat(Base):
-    __tablename__ = "stats"
+    __tablename__ = "player stats"
     player_id = Column(String, primary_key=True)
     season = Column(Integer, primary_key=True)
     week = Column(Integer, primary_key=True)
