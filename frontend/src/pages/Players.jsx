@@ -98,12 +98,12 @@ export default function Players() {
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: '#f0f0f0' }}>
+          <tr style={{ background: 'rgb(155, 157, 157)' }}>
             <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Position</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Age</th>
-            <th style={{ padding: '10px', textAlign: 'left' }}>Status</th>
+            <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
           </tr>
         </thead>
         <tbody>

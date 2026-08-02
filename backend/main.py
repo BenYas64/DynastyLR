@@ -1,6 +1,7 @@
 import json
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup
 
@@ -29,6 +30,16 @@ def search_players(q: str, db: Session = Depends(get_db)):
         Player.full_name.ilike(f"%{q}%")
     ).limit(20).all()
     return players
+
+@app.get("/players/points/{season}")
+def get_season_points(season: int, db: Session = Depends(get_db)):
+    rows = (
+        db.query(Stat.player_id, func.sum(Stat.pts_ppr).label("points"))
+        .filter(Stat.season == season, Stat.season_type == "regular")
+        .group_by(Stat.player_id)
+        .all()
+    )
+    return {player_id: points or 0 for player_id, points in rows}
 
 @app.get("/players/{player_id}")
 def get_player(player_id: str, db: Session = Depends(get_db)):
