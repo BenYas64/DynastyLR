@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Fragment } from 'react'
 import { useParams, useLocation, Link } from 'react-router-dom'
 
 const API = 'https://api.dynastylr.site'
 
-const STAT_COLUMNS = [
+const WEEK_COLUMNS = [
   ['week', 'Week'],
   ['pts_ppr', 'PPR'],
   ['pass_yd', 'Pass Yd'],
@@ -18,6 +18,8 @@ const STAT_COLUMNS = [
   ['rec_td', 'Rec TD'],
 ]
 
+const SUM_KEYS = WEEK_COLUMNS.filter(([key]) => key !== 'week').map(([key]) => key)
+
 export default function PlayerDetail() {
   const { playerId } = useParams()
   const location = useLocation()
@@ -25,14 +27,14 @@ export default function PlayerDetail() {
   const backLabel = location.state?.backLabel || 'Back to Players'
   const [player, setPlayer] = useState(null)
   const [stats, setStats] = useState([])
-  const [season, setSeason] = useState('all')
+  const [expandedSeason, setExpandedSeason] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    setSeason('all')
+    setExpandedSeason(null)
     fetch(`${API}/players/${playerId}`)
       .then(r => {
         if (!r.ok) throw new Error(r.status === 404 ? 'Player not found' : 'Failed to load player')
@@ -49,12 +51,19 @@ export default function PlayerDetail() {
       })
   }, [playerId])
 
-  const seasons = useMemo(
-    () => [...new Set(stats.map(s => s.season))].sort((a, b) => b - a),
-    [stats]
-  )
-
-  const filteredStats = season === 'all' ? stats : stats.filter(s => s.season === Number(season))
+  const seasonTotals = useMemo(() => {
+    const bySeason = {}
+    for (const s of stats) {
+      if (!bySeason[s.season]) {
+        bySeason[s.season] = { season: s.season, weeks: [] }
+        SUM_KEYS.forEach(key => { bySeason[s.season][key] = 0 })
+      }
+      const totals = bySeason[s.season]
+      totals.weeks.push(s)
+      SUM_KEYS.forEach(key => { totals[key] += s[key] || 0 })
+    }
+    return Object.values(bySeason).sort((a, b) => b.season - a.season)
+  }, [stats])
 
   if (loading) return <p style={{ padding: '20px' }}>Loading player...</p>
   if (error) return (
@@ -97,43 +106,68 @@ export default function PlayerDetail() {
       </table>
 
       <h3 style={{ marginTop: '30px' }}>Stats</h3>
-      {seasons.length === 0 ? (
+      {seasonTotals.length === 0 ? (
         <p>No stats available.</p>
       ) : (
-        <>
-          <select
-            value={season}
-            onChange={e => setSeason(e.target.value)}
-            style={{ padding: '6px', marginBottom: '10px', fontSize: '14px' }}
-          >
-            <option value="all">All Seasons</option>
-            {seasons.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f0f0f0' }}>
-                  {season === 'all' && <th style={{ padding: '8px', textAlign: 'left' }}>Season</th>}
-                  {STAT_COLUMNS.map(([key, label]) => (
-                    <th key={key} style={{ padding: '8px', textAlign: 'left' }}>{label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStats.map(s => (
-                  <tr key={`${s.season}-${s.week}`} style={{ borderBottom: '1px solid #ddd' }}>
-                    {season === 'all' && <td style={{ padding: '8px' }}>{s.season}</td>}
-                    {STAT_COLUMNS.map(([key]) => (
-                      <td key={key} style={{ padding: '8px' }}>{s[key] ?? '-'}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f0f0f0' }}>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Season</th>
+                {SUM_KEYS.map(key => {
+                  const label = WEEK_COLUMNS.find(([k]) => k === key)[1]
+                  return <th key={key} style={{ padding: '8px', textAlign: 'left' }}>{label}</th>
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {seasonTotals.map(t => {
+                const isExpanded = expandedSeason === t.season
+                return (
+                  <Fragment key={t.season}>
+                    <tr
+                      onClick={() => setExpandedSeason(isExpanded ? null : t.season)}
+                      style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
+                    >
+                      <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                        {isExpanded ? '▾' : '▸'} {t.season}
+                      </td>
+                      {SUM_KEYS.map(key => (
+                        <td key={key} style={{ padding: '8px' }}>
+                          {key === 'pts_ppr' ? t[key].toFixed(2) : t[key]}
+                        </td>
+                      ))}
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={SUM_KEYS.length + 1} style={{ padding: '0 0 12px 20px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                {WEEK_COLUMNS.map(([key, label]) => (
+                                  <th key={key} style={{ padding: '6px', textAlign: 'left', color: '#666', fontWeight: 'normal' }}>{label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {t.weeks.map(w => (
+                                <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
+                                  {WEEK_COLUMNS.map(([key]) => (
+                                    <td key={key} style={{ padding: '6px' }}>{w[key] ?? '-'}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
