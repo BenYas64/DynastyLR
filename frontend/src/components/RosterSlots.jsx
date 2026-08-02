@@ -32,6 +32,7 @@ const SLOT_COLORS = {
   QB: '#d32f2f',
   RB: '#2e7d32',
   WR: '#1976d2',
+  TE: '#d26019',
   FLEX: '#7b1fa2',
   SUPER_FLEX: '#d32f2f',
 }
