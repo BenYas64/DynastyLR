@@ -43,7 +43,11 @@ export default function MyTeam() {
       <ul>
         {roster.starters?.map(id => (
           <li key={id} style={{ padding: '5px 0' }}>
-            <Link to={`/players/${id}`} style={{ color: 'inherit' }}>
+            <Link
+              to={`/players/${id}`}
+              state={{ backTo: '/my-team', backLabel: 'Back to My Team' }}
+              style={{ color: 'inherit' }}
+            >
               {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
             </Link>
           </li>
@@ -53,7 +57,11 @@ export default function MyTeam() {
       <ul>
         {roster.players?.filter(id => !roster.starters?.includes(id)).map(id => (
           <li key={id} style={{ padding: '5px 0', color: '#666' }}>
-            <Link to={`/players/${id}`} style={{ color: 'inherit' }}>
+            <Link
+              to={`/players/${id}`}
+              state={{ backTo: '/my-team', backLabel: 'Back to My Team' }}
+              style={{ color: 'inherit' }}
+            >
               {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
             </Link>
           </li>

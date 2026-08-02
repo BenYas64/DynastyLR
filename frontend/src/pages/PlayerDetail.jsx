@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useLocation, Link } from 'react-router-dom'
 
 const API = 'https://api.dynastylr.site'
 
@@ -20,6 +20,9 @@ const STAT_COLUMNS = [
 
 export default function PlayerDetail() {
   const { playerId } = useParams()
+  const location = useLocation()
+  const backTo = location.state?.backTo || '/players'
+  const backLabel = location.state?.backLabel || 'Back to Players'
   const [player, setPlayer] = useState(null)
   const [stats, setStats] = useState([])
   const [season, setSeason] = useState('all')
@@ -57,7 +60,7 @@ export default function PlayerDetail() {
   if (error) return (
     <div style={{ padding: '20px' }}>
       <p style={{ color: 'red' }}>Error: {error}</p>
-      <Link to="/players">&larr; Back to Players</Link>
+      <Link to={backTo}>&larr; {backLabel}</Link>
     </div>
   )
 
@@ -80,7 +83,7 @@ export default function PlayerDetail() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <Link to="/players">&larr; Back to Players</Link>
+      <Link to={backTo}>&larr; {backLabel}</Link>
       <h2 style={{ marginTop: '10px' }}>{player.full_name}</h2>
       <table style={{ borderCollapse: 'collapse', marginTop: '10px' }}>
         <tbody>
