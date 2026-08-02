@@ -36,7 +36,7 @@ function eligiblePositionsForRoster(rosterPositions) {
 
 export default function Players() {
   const navigate = useNavigate()
-  const { leagues, selectedLeagueId } = useAccount()
+  const { selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
   const [points, setPoints] = useState({})
   const [search, setSearch] = useState('')
@@ -44,6 +44,7 @@ export default function Players() {
   const [error, setError] = useState(null)
   const [filterMode, setFilterMode] = useState('all') // 'all' | 'available'
   const [rosteredIds, setRosteredIds] = useState(null)
+  const [selectedLeague, setSelectedLeague] = useState(null)
 
   useEffect(() => {
     Promise.all([
@@ -69,12 +70,22 @@ export default function Players() {
       .catch(() => setRosteredIds(new Set()))
   }, [filterMode, selectedLeagueId])
 
+  useEffect(() => {
+    if (!selectedLeagueId) {
+      setSelectedLeague(null)
+      return
+    }
+    fetch(`${API}/league/${selectedLeagueId}`)
+      .then(r => r.json())
+      .then(setSelectedLeague)
+      .catch(() => setSelectedLeague(null))
+  }, [selectedLeagueId])
+
   if (loading) return <p style={{ padding: '20px' }}>Loading players...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
 
   const showAvailableOnly = filterMode === 'available' && selectedLeagueId && rosteredIds
 
-  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
   const leagueRosterPositions = selectedLeague ? parseJsonArray(selectedLeague.roster_positions) : []
   const eligiblePositions = eligiblePositionsForRoster(leagueRosterPositions)
 
