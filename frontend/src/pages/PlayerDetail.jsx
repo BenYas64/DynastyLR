@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, Fragment } from 'react'
 import { useParams, useLocation, Link } from 'react-router-dom'
+import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
@@ -21,16 +22,27 @@ const SUM_KEYS = WEEK_COLUMNS.filter(([key]) => key !== 'week').map(([key]) => k
 
 const CURRENT_SEASON = 2025
 
+// raw_stats holds Sleeper's full per-player-week breakdown (kicking,
+// defense/IDP, bonus thresholds, etc.), keyed the same as scoring_settings,
+// so a league's custom scoring can be computed for any category Sleeper
+// tracks without needing a dedicated column per stat.
+function leagueScoreForStat(stat, scoringSettings) {
+  const raw = stat.raw_stats || {}
+  return Object.keys(scoringSettings).reduce((total, key) => total + (raw[key] || 0) * scoringSettings[key], 0)
+}
+
 export default function PlayerDetail() {
   const { playerId } = useParams()
   const location = useLocation()
   const backTo = location.state?.backTo || '/players'
   const backLabel = location.state?.backLabel || 'Back to Players'
+  const { selectedLeagueId } = useAccount()
   const [player, setPlayer] = useState(null)
   const [stats, setStats] = useState([])
   const [expandedSeason, setExpandedSeason] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selectedLeague, setSelectedLeague] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -52,19 +64,41 @@ export default function PlayerDetail() {
       })
   }, [playerId])
 
+  useEffect(() => {
+    if (!selectedLeagueId) {
+      setSelectedLeague(null)
+      return
+    }
+    fetch(`${API}/league/${selectedLeagueId}`)
+      .then(r => r.json())
+      .then(setSelectedLeague)
+      .catch(() => setSelectedLeague(null))
+  }, [selectedLeagueId])
+
+  const scoringSettings = useMemo(() => {
+    if (!selectedLeague?.scoring_settings) return null
+    try {
+      return JSON.parse(selectedLeague.scoring_settings)
+    } catch {
+      return null
+    }
+  }, [selectedLeague])
+
   const seasonTotals = useMemo(() => {
     const bySeason = {}
     for (const s of stats) {
       if (!bySeason[s.season]) {
-        bySeason[s.season] = { season: s.season, weeks: [] }
+        bySeason[s.season] = { season: s.season, weeks: [], leaguePts: 0 }
         SUM_KEYS.forEach(key => { bySeason[s.season][key] = 0 })
       }
       const totals = bySeason[s.season]
-      totals.weeks.push(s)
+      const leaguePts = scoringSettings ? leagueScoreForStat(s, scoringSettings) : null
+      totals.weeks.push({ ...s, leaguePts })
+      totals.leaguePts += leaguePts || 0
       SUM_KEYS.forEach(key => { totals[key] += s[key] || 0 })
     }
     return Object.values(bySeason).sort((a, b) => b.season - a.season)
-  }, [stats])
+  }, [stats, scoringSettings])
 
   if (loading) return <p style={{ padding: '20px' }}>Loading player...</p>
   if (error) return (
@@ -114,6 +148,16 @@ export default function PlayerDetail() {
       </table>
 
       <h3 style={{ marginTop: '30px' }}>Stats</h3>
+      {!scoringSettings && (
+        <p style={{ color: '#666', fontSize: '14px' }}>
+          Sign in and select a league on the Account page to see points using that league's scoring settings.
+        </p>
+      )}
+      {scoringSettings && (
+        <p style={{ color: '#666', fontSize: '14px' }}>
+          Points below use {selectedLeague.name}'s scoring settings.
+        </p>
+      )}
       {visibleSeasonTotals.length === 0 ? (
         <p>No stats available.</p>
       ) : (
@@ -122,6 +166,7 @@ export default function PlayerDetail() {
             <thead>
               <tr style={{ background: '#f0f0f0' }}>
                 <th style={{ padding: '8px', textAlign: 'left' }}>Season</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Fantasy Pts</th>
                 {SUM_KEYS.map(key => {
                   const label = WEEK_COLUMNS.find(([k]) => k === key)[1]
                   return <th key={key} style={{ padding: '8px', textAlign: 'left' }}>{label}</th>
@@ -140,6 +185,9 @@ export default function PlayerDetail() {
                       <td style={{ padding: '8px', fontWeight: 'bold' }}>
                         {isExpanded ? '▾' : '▸'} {t.season}
                       </td>
+                      <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                        {scoringSettings ? t.leaguePts.toFixed(2) : '-'}
+                      </td>
                       {SUM_KEYS.map(key => (
                         <td key={key} style={{ padding: '8px' }}>
                           {key === 'pts_ppr' ? t[key].toFixed(2) : t[key]}
@@ -148,10 +196,11 @@ export default function PlayerDetail() {
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={SUM_KEYS.length + 1} style={{ padding: '0 0 12px 20px' }}>
+                        <td colSpan={SUM_KEYS.length + 2} style={{ padding: '0 0 12px 20px' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr>
+                                <th style={{ padding: '6px', textAlign: 'left', color: '#666', fontWeight: 'normal' }}>Fantasy Pts</th>
                                 {WEEK_COLUMNS.map(([key, label]) => (
                                   <th key={key} style={{ padding: '6px', textAlign: 'left', color: '#666', fontWeight: 'normal' }}>{label}</th>
                                 ))}
@@ -160,6 +209,7 @@ export default function PlayerDetail() {
                             <tbody>
                               {t.weeks.map(w => (
                                 <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
+                                  <td style={{ padding: '6px' }}>{w.leaguePts != null ? w.leaguePts.toFixed(2) : '-'}</td>
                                   {WEEK_COLUMNS.map(([key]) => (
                                     <td key={key} style={{ padding: '6px' }}>{w[key] ?? '-'}</td>
                                   ))}

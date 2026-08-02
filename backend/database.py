@@ -78,6 +78,7 @@ class Stat(Base):
     rec_td = Column(Integer)
     rec_tgt = Column(Integer)
     fum_lost = Column(Integer)
+    raw_stats = Column(JSONB)
 
 class User(Base):
     __tablename__ = "users"

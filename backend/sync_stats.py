@@ -14,6 +14,13 @@ STAT_FIELDS = [
     "fum_lost",
 ]
 
+# Sleeper's stats payload also carries the full breakdown (kicking, defense/IDP,
+# bonus thresholds, etc.) that league scoring_settings can reference. STAT_FIELDS
+# stays as its own columns for existing queries (e.g. summing pts_ppr); raw_stats
+# keeps everything else so custom league scoring can be computed without needing
+# a new column per stat category.
+UPDATE_FIELDS = STAT_FIELDS + ["raw_stats"]
+
 def weeks_in_season(season):
     return range(1, 19) if season >= 2021 else range(1, 18)
 
@@ -40,6 +47,7 @@ def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="re
                         "week": week,
                         "season_type": season_type,
                         **{field: s.get(field) for field in STAT_FIELDS},
+                        "raw_stats": s,
                     }
                     for player_id, s in data.items()
                 ]
@@ -47,7 +55,7 @@ def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="re
                 stmt = insert(Stat).values(rows)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["player_id", "season", "week", "season_type"],
-                    set_={field: stmt.excluded[field] for field in STAT_FIELDS},
+                    set_={field: stmt.excluded[field] for field in UPDATE_FIELDS},
                 )
                 db.execute(stmt)
                 db.commit()
