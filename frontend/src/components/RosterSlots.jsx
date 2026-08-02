@@ -28,6 +28,14 @@ function buildSlotRows(rosterPositions, starters, allPlayers) {
   return rows
 }
 
+const SLOT_COLORS = {
+  QB: '#d32f2f',
+  RB: '#2e7d32',
+  WR: '#1976d2',
+  FLEX: '#7b1fa2',
+  SUPER_FLEX: '#d32f2f',
+}
+
 export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel }) {
   if (!rosterPositions || rosterPositions.length === 0) return null
 
@@ -57,8 +65,8 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
                 fontSize: '12px',
                 fontWeight: 'bold',
                 textAlign: 'center',
-                color: row.overflow ? '#fff' : '#333',
-                background: row.overflow ? '#d32f2f' : '#e0e0e0',
+                color: row.overflow || SLOT_COLORS[row.slot] ? '#fff' : '#333',
+                background: row.overflow ? '#d32f2f' : SLOT_COLORS[row.slot] || '#e0e0e0',
               }}
             >
               {row.slot}
