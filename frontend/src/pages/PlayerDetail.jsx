@@ -5,7 +5,6 @@ const API = 'https://api.dynastylr.site'
 
 const WEEK_COLUMNS = [
   ['week', 'Week'],
-  ['pts_ppr', 'PPR'],
   ['pass_yd', 'Pass Yd'],
   ['pass_td', 'Pass TD'],
   ['pass_int', 'INT'],

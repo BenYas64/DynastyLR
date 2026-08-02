@@ -50,6 +50,13 @@ def get_leagues(user_id: str, season: int = 2025, db: Session = Depends(get_db))
     )
     return leagues
 
+@app.get("/league/{league_id}")
+def get_league(league_id: str, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    return league
+
 @app.get("/league/{league_id}/rosters")
 def get_rosters(league_id: str, db: Session = Depends(get_db)):
     rosters = db.query(Roster).filter(Roster.league_id == league_id).all()

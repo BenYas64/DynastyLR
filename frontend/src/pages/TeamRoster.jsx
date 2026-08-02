@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import RosterSlots from '../components/RosterSlots.jsx'
 
 const API = 'https://api.dynastylr.site'
 
@@ -8,6 +9,7 @@ export default function TeamRoster() {
   const [roster, setRoster] = useState(null)
   const [owner, setOwner] = useState(null)
   const [players, setPlayers] = useState({})
+  const [rosterPositions, setRosterPositions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -17,8 +19,9 @@ export default function TeamRoster() {
     Promise.all([
       fetch(`${API}/league/${leagueId}/rosters`).then(r => r.json()),
       fetch(`${API}/league/${leagueId}/users`).then(r => r.json()),
-      fetch(`${API}/players`).then(r => r.json())
-    ]).then(([rosters, users, playersData]) => {
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/league/${leagueId}`).then(r => r.json())
+    ]).then(([rosters, users, playersData, league]) => {
       const myRoster = rosters.find(r => String(r.roster_id) === rosterId)
       if (!myRoster) throw new Error('Roster not found')
       const userMap = {}
@@ -30,6 +33,7 @@ export default function TeamRoster() {
       setRoster(myRoster)
       setOwner(userMap[myRoster.owner_id] || null)
       setPlayers(playersMap)
+      setRosterPositions(league?.roster_positions ? JSON.parse(league.roster_positions) : null)
       setLoading(false)
     }).catch(err => {
       setError(err.message)
@@ -52,34 +56,14 @@ export default function TeamRoster() {
       <h2 style={{ marginTop: '10px' }}>{owner?.display_name || 'Unknown'}</h2>
       <p>Record: {roster.settings.wins}W - {roster.settings.losses}L</p>
       <p>Points For: {roster.settings.fpts}</p>
-      <h3>Starters</h3>
-      <ul>
-        {roster.starters?.map(id => (
-          <li key={id} style={{ padding: '5px 0' }}>
-            <Link
-              to={`/players/${id}`}
-              state={{ backTo: `/league/${leagueId}/roster/${rosterId}`, backLabel: 'Back to Roster' }}
-              style={{ color: 'inherit' }}
-            >
-              {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <h3>Bench</h3>
-      <ul>
-        {roster.players?.filter(id => !roster.starters?.includes(id)).map(id => (
-          <li key={id} style={{ padding: '5px 0', color: '#666' }}>
-            <Link
-              to={`/players/${id}`}
-              state={{ backTo: `/league/${leagueId}/roster/${rosterId}`, backLabel: 'Back to Roster' }}
-              style={{ color: 'inherit' }}
-            >
-              {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <RosterSlots
+        rosterPositions={rosterPositions}
+        starters={roster.starters}
+        allPlayers={roster.players}
+        playersMap={players}
+        backTo={`/league/${leagueId}/roster/${rosterId}`}
+        backLabel="Back to Roster"
+      />
     </div>
   )
 }

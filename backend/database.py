@@ -93,6 +93,8 @@ class League(Base):
     season = Column(Integer)
     status = Column(String)
     total_rosters = Column(Integer)
+    scoring_settings = Column(String)
+    roster_positions = Column(String)
 
 class Roster(Base):
     __tablename__ = "rosters"

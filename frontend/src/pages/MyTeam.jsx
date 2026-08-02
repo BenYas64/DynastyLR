@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
+import RosterSlots from '../components/RosterSlots.jsx'
 
 const API = 'https://api.dynastylr.site'
 
 export default function MyTeam() {
   const { user, selectedLeagueId } = useAccount()
   const [roster, setRoster] = useState(null)
+  const [rosterPositions, setRosterPositions] = useState(null)
   const [players, setPlayers] = useState({})
   const [loading, setLoading] = useState(false)
 
@@ -15,13 +16,15 @@ export default function MyTeam() {
     setLoading(true)
     Promise.all([
       fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
-      fetch(`${API}/players`).then(r => r.json())
-    ]).then(([rosters, playersData]) => {
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/league/${selectedLeagueId}`).then(r => r.json())
+    ]).then(([rosters, playersData, league]) => {
       const myRoster = rosters.find(r => r.owner_id === user.user_id)
       const playersMap = {}
       playersData.forEach(p => { playersMap[p.player_id] = p })
       setRoster(myRoster)
       setPlayers(playersMap)
+      setRosterPositions(league?.roster_positions ? JSON.parse(league.roster_positions) : null)
       setLoading(false)
     })
   }, [user, selectedLeagueId])
@@ -39,34 +42,14 @@ export default function MyTeam() {
       <h2>My Team</h2>
       <p>Record: {roster.settings.wins}W - {roster.settings.losses}L</p>
       <p>Points For: {roster.settings.fpts}</p>
-      <h3>Starters</h3>
-      <ul>
-        {roster.starters?.map(id => (
-          <li key={id} style={{ padding: '5px 0' }}>
-            <Link
-              to={`/players/${id}`}
-              state={{ backTo: '/my-team', backLabel: 'Back to My Team' }}
-              style={{ color: 'inherit' }}
-            >
-              {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
-            </Link>
-          </li>
-        ))}
-      </ul>
-      <h3>Bench</h3>
-      <ul>
-        {roster.players?.filter(id => !roster.starters?.includes(id)).map(id => (
-          <li key={id} style={{ padding: '5px 0', color: '#666' }}>
-            <Link
-              to={`/players/${id}`}
-              state={{ backTo: '/my-team', backLabel: 'Back to My Team' }}
-              style={{ color: 'inherit' }}
-            >
-              {players[id] ? `${players[id].first_name} ${players[id].last_name} - ${players[id].position} - ${players[id].team}` : id}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <RosterSlots
+        rosterPositions={rosterPositions}
+        starters={roster.starters}
+        allPlayers={roster.players}
+        playersMap={players}
+        backTo="/my-team"
+        backLabel="Back to My Team"
+      />
     </div>
   )
 }

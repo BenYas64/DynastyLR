@@ -1,0 +1,84 @@
+import { Link } from 'react-router-dom'
+
+// Builds one row per roster slot: starter slots (in league roster_positions order,
+// filled positionally from `starters`, which Sleeper always returns in that same
+// order), followed by BN rows. Bench rows are padded to the league's BN count with
+// blanks, or extended (and flagged as overflow) if there are more bench players
+// than BN slots.
+function buildSlotRows(rosterPositions, starters, allPlayers) {
+  const starterSlots = rosterPositions.filter(p => p !== 'BN')
+  const bnCount = rosterPositions.length - starterSlots.length
+  const startersList = starters || []
+
+  const rows = starterSlots.map((slot, i) => {
+    const playerId = startersList[i]
+    return { slot, playerId: playerId && playerId !== '0' ? playerId : null, overflow: false }
+  })
+
+  const benchPlayerIds = (allPlayers || []).filter(id => !startersList.includes(id))
+  const benchRowCount = Math.max(bnCount, benchPlayerIds.length)
+  for (let i = 0; i < benchRowCount; i++) {
+    rows.push({
+      slot: 'BN',
+      playerId: benchPlayerIds[i] || null,
+      overflow: i >= bnCount,
+    })
+  }
+
+  return rows
+}
+
+export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel }) {
+  if (!rosterPositions || rosterPositions.length === 0) return null
+
+  const rows = buildSlotRows(rosterPositions, starters, allPlayers)
+
+  return (
+    <div>
+      {rows.map((row, i) => {
+        const player = row.playerId ? playersMap[row.playerId] : null
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '6px 0',
+              borderBottom: '1px solid #eee',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                minWidth: '70px',
+                padding: '2px 8px',
+                marginRight: '12px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                textAlign: 'center',
+                color: row.overflow ? '#fff' : '#333',
+                background: row.overflow ? '#d32f2f' : '#e0e0e0',
+              }}
+            >
+              {row.slot}
+            </span>
+            {player ? (
+              <Link
+                to={`/players/${row.playerId}`}
+                state={{ backTo, backLabel }}
+                style={{ color: 'inherit' }}
+              >
+                {player.first_name} {player.last_name} - {player.position} - {player.team}
+              </Link>
+            ) : row.playerId ? (
+              <span>{row.playerId}</span>
+            ) : (
+              <span style={{ color: '#bbb' }}>Empty</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
