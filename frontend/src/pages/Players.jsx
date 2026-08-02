@@ -47,13 +47,10 @@ export default function Players() {
   const [selectedLeague, setSelectedLeague] = useState(null)
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${API}/players`).then(r => r.json()),
-      fetch(`${API}/players/points/2025`).then(r => r.json()),
-    ])
-      .then(([playersData, pointsData]) => {
-        setPlayers(playersData)
-        setPoints(pointsData)
+    fetch(`${API}/players`)
+      .then(r => r.json())
+      .then(data => {
+        setPlayers(data)
         setLoading(false)
       })
       .catch(err => {
@@ -71,14 +68,29 @@ export default function Players() {
   }, [filterMode, selectedLeagueId])
 
   useEffect(() => {
-    if (!selectedLeagueId) {
+    const fallbackToPpr = () => {
       setSelectedLeague(null)
+      fetch(`${API}/players/points/2025`).then(r => r.json()).then(setPoints).catch(() => setPoints({}))
+    }
+
+    if (!selectedLeagueId) {
+      fallbackToPpr()
       return
     }
+
     fetch(`${API}/league/${selectedLeagueId}`)
       .then(r => r.json())
-      .then(setSelectedLeague)
-      .catch(() => setSelectedLeague(null))
+      .then(league => {
+        if (!league.scoring_settings) {
+          fallbackToPpr()
+          return
+        }
+        setSelectedLeague(league)
+        return fetch(`${API}/league/${selectedLeagueId}/points/2025`)
+          .then(r => r.json())
+          .then(setPoints)
+      })
+      .catch(fallbackToPpr)
   }, [selectedLeagueId])
 
   if (loading) return <p style={{ padding: '20px' }}>Loading players...</p>
@@ -98,6 +110,11 @@ export default function Players() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Players ({players.length} total)</h2>
+      <p style={{ color: '#666', fontSize: '14px' }}>
+        {selectedLeague
+          ? `2025 points use ${selectedLeague.name}'s scoring settings.`
+          : 'Showing standard PPR points. Sign in and select a league on the Account page for that league\'s scoring.'}
+      </p>
 
       <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '20px' }}>
         <input

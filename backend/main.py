@@ -41,6 +41,37 @@ def get_season_points(season: int, db: Session = Depends(get_db)):
     )
     return {player_id: points or 0 for player_id, points in rows}
 
+NON_STAT_COLUMNS = {"player_id", "season", "week", "season_type", "team", "opponent"}
+
+@app.get("/league/{league_id}/points/{season}")
+def get_league_points(league_id: str, season: int, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    if not league.scoring_settings:
+        raise HTTPException(status_code=404, detail="League has no scoring settings")
+
+    scoring_settings = json.loads(league.scoring_settings)
+    terms = [
+        func.coalesce(getattr(Stat, key), 0) * weight
+        for key, weight in scoring_settings.items()
+        if weight and key not in NON_STAT_COLUMNS and hasattr(Stat, key)
+    ]
+    if not terms:
+        return {}
+
+    total = terms[0]
+    for term in terms[1:]:
+        total = total + term
+
+    rows = (
+        db.query(Stat.player_id, func.sum(total).label("points"))
+        .filter(Stat.season == season, Stat.season_type == "regular")
+        .group_by(Stat.player_id)
+        .all()
+    )
+    return {player_id: points or 0 for player_id, points in rows}
+
 @app.get("/players/{player_id}")
 def get_player(player_id: str, db: Session = Depends(get_db)):
     player = db.query(Player).filter(Player.player_id == player_id).first()
