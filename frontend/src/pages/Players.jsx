@@ -14,6 +14,26 @@ function parseJsonArray(value) {
   }
 }
 
+// Flex-type roster slots don't literally match a player's fantasy_positions
+// (e.g. no player is tagged "FLEX"), so they're expanded to the positions
+// eligible to fill them.
+const FLEX_ELIGIBLE_POSITIONS = {
+  FLEX: ['RB', 'WR', 'TE'],
+  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
+  WRRB_FLEX: ['WR', 'RB'],
+  REC_FLEX: ['WR', 'TE'],
+}
+
+function eligiblePositionsForRoster(rosterPositions) {
+  const eligible = new Set()
+  for (const slot of rosterPositions) {
+    for (const pos of FLEX_ELIGIBLE_POSITIONS[slot] || [slot]) {
+      eligible.add(pos)
+    }
+  }
+  return eligible
+}
+
 export default function Players() {
   const navigate = useNavigate()
   const { leagues, selectedLeagueId } = useAccount()
@@ -55,12 +75,13 @@ export default function Players() {
   const showAvailableOnly = filterMode === 'available' && selectedLeagueId && rosteredIds
 
   const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
-  const leagueRosterPositions = selectedLeague ? parseJsonArray(selectedLeague.roster_positions) : null
+  const leagueRosterPositions = selectedLeague ? parseJsonArray(selectedLeague.roster_positions) : []
+  const eligiblePositions = eligiblePositionsForRoster(leagueRosterPositions)
 
   const filtered = players
     .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()))
     .filter(p => !showAvailableOnly || !rosteredIds.has(p.player_id))
-    .filter(p => !leagueRosterPositions || parseJsonArray(p.fantasy_positions).some(pos => leagueRosterPositions.includes(pos)))
+    .filter(p => leagueRosterPositions.length === 0 || parseJsonArray(p.fantasy_positions).some(pos => eligiblePositions.has(pos)))
     .sort((a, b) => (points[b.player_id] || 0) - (points[a.player_id] || 0))
 
   return (
