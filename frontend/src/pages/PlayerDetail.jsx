@@ -19,6 +19,8 @@ const WEEK_COLUMNS = [
 
 const SUM_KEYS = WEEK_COLUMNS.filter(([key]) => key !== 'week').map(([key]) => key)
 
+const CURRENT_SEASON = 2025
+
 export default function PlayerDetail() {
   const { playerId } = useParams()
   const location = useLocation()
@@ -89,6 +91,13 @@ export default function PlayerDetail() {
     ['Depth Chart', player.depth_chart_position ? `${player.depth_chart_position} #${player.depth_chart_order ?? ''}` : null],
   ].filter(([, value]) => value !== null && value !== undefined && value !== '')
 
+  const earliestSeason = player.years_exp == null
+    ? null
+    : CURRENT_SEASON - Math.max(player.years_exp - 1, 0)
+  const visibleSeasonTotals = earliestSeason == null
+    ? seasonTotals
+    : seasonTotals.filter(t => t.season >= earliestSeason)
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <Link to={backTo}>&larr; {backLabel}</Link>
@@ -105,7 +114,7 @@ export default function PlayerDetail() {
       </table>
 
       <h3 style={{ marginTop: '30px' }}>Stats</h3>
-      {seasonTotals.length === 0 ? (
+      {visibleSeasonTotals.length === 0 ? (
         <p>No stats available.</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -120,7 +129,7 @@ export default function PlayerDetail() {
               </tr>
             </thead>
             <tbody>
-              {seasonTotals.map(t => {
+              {visibleSeasonTotals.map(t => {
                 const isExpanded = expandedSeason === t.season
                 return (
                   <Fragment key={t.season}>
