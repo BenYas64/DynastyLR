@@ -22,13 +22,12 @@ const SUM_KEYS = WEEK_COLUMNS.filter(([key]) => key !== 'week').map(([key]) => k
 
 const CURRENT_SEASON = 2025
 
-// raw_stats holds Sleeper's full per-player-week breakdown (kicking,
-// defense/IDP, bonus thresholds, etc.), keyed the same as scoring_settings,
-// so a league's custom scoring can be computed for any category Sleeper
-// tracks without needing a dedicated column per stat.
+// Each stat row has a column per Sleeper stat category (kicking, defense/IDP,
+// bonus thresholds, etc.), named the same as the matching scoring_settings
+// key, so a league's custom scoring can be computed for any category Sleeper
+// tracks.
 function leagueScoreForStat(stat, scoringSettings) {
-  const raw = stat.raw_stats || {}
-  return Object.keys(scoringSettings).reduce((total, key) => total + (raw[key] || 0) * scoringSettings[key], 0)
+  return Object.keys(scoringSettings).reduce((total, key) => total + (stat[key] || 0) * scoringSettings[key], 0)
 }
 
 export default function PlayerDetail() {
