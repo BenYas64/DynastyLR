@@ -4,9 +4,19 @@ import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
+function parseJsonArray(value) {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export default function Players() {
   const navigate = useNavigate()
-  const { selectedLeagueId } = useAccount()
+  const { leagues, selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
   const [points, setPoints] = useState({})
   const [search, setSearch] = useState('')
@@ -44,9 +54,13 @@ export default function Players() {
 
   const showAvailableOnly = filterMode === 'available' && selectedLeagueId && rosteredIds
 
+  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
+  const leagueRosterPositions = selectedLeague ? parseJsonArray(selectedLeague.roster_positions) : null
+
   const filtered = players
     .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()))
     .filter(p => !showAvailableOnly || !rosteredIds.has(p.player_id))
+    .filter(p => !leagueRosterPositions || parseJsonArray(p.fantasy_positions).some(pos => leagueRosterPositions.includes(pos)))
     .sort((a, b) => (points[b.player_id] || 0) - (points[a.player_id] || 0))
 
   return (
