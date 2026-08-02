@@ -8,6 +8,7 @@ export default function Players() {
   const navigate = useNavigate()
   const { selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
+  const [points, setPoints] = useState({})
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -15,10 +16,13 @@ export default function Players() {
   const [rosteredIds, setRosteredIds] = useState(null)
 
   useEffect(() => {
-    fetch(`${API}/players`)
-      .then(r => r.json())
-      .then(data => {
-        setPlayers(data)
+    Promise.all([
+      fetch(`${API}/players`).then(r => r.json()),
+      fetch(`${API}/players/points/2025`).then(r => r.json()),
+    ])
+      .then(([playersData, pointsData]) => {
+        setPlayers(playersData)
+        setPoints(pointsData)
         setLoading(false)
       })
       .catch(err => {
@@ -43,6 +47,7 @@ export default function Players() {
   const filtered = players
     .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()))
     .filter(p => !showAvailableOnly || !rosteredIds.has(p.player_id))
+    .sort((a, b) => (points[b.player_id] || 0) - (points[a.player_id] || 0))
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
@@ -104,6 +109,7 @@ export default function Players() {
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Age</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
+            <th style={{ padding: '10px', textAlign: 'left' }}>2025 Points</th>
           </tr>
         </thead>
         <tbody>
@@ -120,6 +126,7 @@ export default function Players() {
               <td style={{ padding: '10px', color: p.injury_status ? 'red' : 'green' }}>
                 {p.injury_status || 'Active'}
               </td>
+              <td style={{ padding: '10px' }}>{(points[p.player_id] || 0).toFixed(1)}</td>
             </tr>
           ))}
         </tbody>
