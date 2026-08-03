@@ -19,22 +19,31 @@ export default function TeamRoster() {
     Promise.all([
       fetch(`${API}/league/${leagueId}/rosters`).then(r => r.json()),
       fetch(`${API}/league/${leagueId}/users`).then(r => r.json()),
-      fetch(`${API}/players`).then(r => r.json()),
       fetch(`${API}/league/${leagueId}`).then(r => r.json())
-    ]).then(([rosters, users, playersData, league]) => {
+    ]).then(([rosters, users, league]) => {
       const myRoster = rosters.find(r => String(r.roster_id) === rosterId)
       if (!myRoster) throw new Error('Roster not found')
       const userMap = {}
       users.forEach(u => { userMap[u.user_id] = u })
 
-      const playersMap = {}
-      playersData.forEach(p => { playersMap[p.player_id] = p })
-
       setRoster(myRoster)
       setOwner(userMap[myRoster.owner_id] || null)
-      setPlayers(playersMap)
       setRosterPositions(league?.roster_positions ? JSON.parse(league.roster_positions) : null)
-      setLoading(false)
+
+      const ids = myRoster.players || []
+      if (ids.length === 0) {
+        setPlayers({})
+        setLoading(false)
+        return
+      }
+      return fetch(`${API}/players/by-ids?ids=${ids.join(',')}`)
+        .then(r => r.json())
+        .then(playersData => {
+          const playersMap = {}
+          playersData.forEach(p => { playersMap[p.player_id] = p })
+          setPlayers(playersMap)
+          setLoading(false)
+        })
     }).catch(err => {
       setError(err.message)
       setLoading(false)

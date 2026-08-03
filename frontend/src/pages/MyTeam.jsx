@@ -16,16 +16,26 @@ export default function MyTeam() {
     setLoading(true)
     Promise.all([
       fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
-      fetch(`${API}/players`).then(r => r.json()),
       fetch(`${API}/league/${selectedLeagueId}`).then(r => r.json())
-    ]).then(([rosters, playersData, league]) => {
+    ]).then(([rosters, league]) => {
       const myRoster = rosters.find(r => r.owner_id === user.user_id)
-      const playersMap = {}
-      playersData.forEach(p => { playersMap[p.player_id] = p })
       setRoster(myRoster)
-      setPlayers(playersMap)
       setRosterPositions(league?.roster_positions ? JSON.parse(league.roster_positions) : null)
-      setLoading(false)
+
+      const ids = myRoster?.players || []
+      if (ids.length === 0) {
+        setPlayers({})
+        setLoading(false)
+        return
+      }
+      return fetch(`${API}/players/by-ids?ids=${ids.join(',')}`)
+        .then(r => r.json())
+        .then(playersData => {
+          const playersMap = {}
+          playersData.forEach(p => { playersMap[p.player_id] = p })
+          setPlayers(playersMap)
+          setLoading(false)
+        })
     })
   }, [user, selectedLeagueId])
 

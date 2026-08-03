@@ -3,115 +3,66 @@ import { useNavigate } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
-
-function parseJsonArray(value) {
-  if (!value) return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-// Flex-type roster slots don't literally match a player's fantasy_positions
-// (e.g. no player is tagged "FLEX"), so they're expanded to the positions
-// eligible to fill them.
-const FLEX_ELIGIBLE_POSITIONS = {
-  FLEX: ['RB', 'WR', 'TE'],
-  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
-  WRRB_FLEX: ['WR', 'RB'],
-  REC_FLEX: ['WR', 'TE'],
-}
-
-function eligiblePositionsForRoster(rosterPositions) {
-  const eligible = new Set()
-  for (const slot of rosterPositions) {
-    for (const pos of FLEX_ELIGIBLE_POSITIONS[slot] || [slot]) {
-      eligible.add(pos)
-    }
-  }
-  return eligible
-}
+const PAGE_SIZE = 100
 
 export default function Players() {
   const navigate = useNavigate()
   const { selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
-  const [points, setPoints] = useState({})
+  const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterMode, setFilterMode] = useState('all') // 'all' | 'available'
-  const [rosteredIds, setRosteredIds] = useState(null)
   const [selectedLeague, setSelectedLeague] = useState(null)
 
   useEffect(() => {
-    fetch(`${API}/players`)
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    if (!selectedLeagueId) {
+      setSelectedLeague(null)
+      return
+    }
+    fetch(`${API}/league/${selectedLeagueId}`)
+      .then(r => r.json())
+      .then(setSelectedLeague)
+      .catch(() => setSelectedLeague(null))
+  }, [selectedLeagueId])
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+    if (debouncedSearch) params.set('q', debouncedSearch)
+    if (selectedLeagueId) params.set('league_id', selectedLeagueId)
+    if (filterMode === 'available' && selectedLeagueId) params.set('available_only', 'true')
+
+    fetch(`${API}/players/browse?${params}`)
       .then(r => r.json())
       .then(data => {
-        setPlayers(data)
+        setPlayers(data.players || [])
+        setTotal(data.total || 0)
         setLoading(false)
       })
       .catch(err => {
         setError(err.message)
         setLoading(false)
       })
-  }, [])
-
-  useEffect(() => {
-    if (filterMode !== 'available' || !selectedLeagueId) return
-    fetch(`${API}/league/${selectedLeagueId}/rostered-players`)
-      .then(r => r.json())
-      .then(ids => setRosteredIds(new Set(ids)))
-      .catch(() => setRosteredIds(new Set()))
-  }, [filterMode, selectedLeagueId])
-
-  useEffect(() => {
-    const fallbackToPpr = () => {
-      setSelectedLeague(null)
-      fetch(`${API}/players/points/2025`).then(r => r.json()).then(setPoints).catch(() => setPoints({}))
-    }
-
-    if (!selectedLeagueId) {
-      fallbackToPpr()
-      return
-    }
-
-    fetch(`${API}/league/${selectedLeagueId}`)
-      .then(r => r.json())
-      .then(league => {
-        if (!league.scoring_settings) {
-          fallbackToPpr()
-          return
-        }
-        setSelectedLeague(league)
-        return fetch(`${API}/league/${selectedLeagueId}/points/2025`)
-          .then(r => r.json())
-          .then(setPoints)
-      })
-      .catch(fallbackToPpr)
-  }, [selectedLeagueId])
+  }, [debouncedSearch, selectedLeagueId, filterMode])
 
   if (loading) return <p style={{ padding: '20px' }}>Loading players...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
 
-  const showAvailableOnly = filterMode === 'available' && selectedLeagueId && rosteredIds
-
-  const leagueRosterPositions = selectedLeague ? parseJsonArray(selectedLeague.roster_positions) : []
-  const eligiblePositions = eligiblePositionsForRoster(leagueRosterPositions)
-
-  const filtered = players
-    .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase()))
-    .filter(p => !showAvailableOnly || !rosteredIds.has(p.player_id))
-    .filter(p => leagueRosterPositions.length === 0 || parseJsonArray(p.fantasy_positions).some(pos => eligiblePositions.has(pos)))
-    .sort((a, b) => (points[b.player_id] || 0) - (points[a.player_id] || 0))
-
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h2>Players ({players.length} total)</h2>
+      <h2>Players ({total} total)</h2>
       <p style={{ color: '#666', fontSize: '14px' }}>
-        {selectedLeague
+        {selectedLeague?.scoring_settings
           ? `2025 points use ${selectedLeague.name}'s scoring settings.`
           : 'Showing standard PPR points. Sign in and select a league on the Account page for that league\'s scoring.'}
       </p>
@@ -160,9 +111,6 @@ export default function Players() {
       {filterMode === 'available' && !selectedLeagueId && (
         <p style={{ color: '#666' }}>Sign in and select a league on the Account page to filter available players.</p>
       )}
-      {filterMode === 'available' && selectedLeagueId && !rosteredIds && (
-        <p>Loading rosters...</p>
-      )}
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
@@ -176,7 +124,7 @@ export default function Players() {
           </tr>
         </thead>
         <tbody>
-          {filtered.slice(0, 100).map(p => (
+          {players.map(p => (
             <tr
               key={p.player_id}
               onClick={() => navigate(`/players/${p.player_id}`)}
@@ -189,12 +137,12 @@ export default function Players() {
               <td style={{ padding: '10px', color: p.injury_status ? 'red' : 'green' }}>
                 {p.injury_status || 'Active'}
               </td>
-              <td style={{ padding: '10px' }}>{(points[p.player_id] || 0).toFixed(1)}</td>
+              <td style={{ padding: '10px' }}>{(p.points || 0).toFixed(1)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {filtered.length > 100 && <p>Showing 100 of {filtered.length}. Search to narrow results.</p>}
+      {total > players.length && <p>Showing {players.length} of {total}. Search to narrow results.</p>}
     </div>
   )
 }
