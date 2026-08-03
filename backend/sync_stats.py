@@ -2,8 +2,13 @@ import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Stat
 
-START_SEASON = 2017
-END_SEASON = 2025
+CURRENT_SEASON = 2025
+
+# Full-history bounds, for one-off backfills only (e.g. sync_stats(start_season=FULL_HISTORY_START_SEASON, end_season=FULL_HISTORY_END_SEASON)).
+# Routine syncs should stick to the current season - rewriting all 9 seasons every
+# run is what drained this project's disk I/O budget last time.
+FULL_HISTORY_START_SEASON = 2017
+FULL_HISTORY_END_SEASON = 2025
 
 STAT_FIELDS = [
     "team", "opponent",
@@ -62,7 +67,7 @@ STAT_FIELDS = [
 def weeks_in_season(season):
     return range(1, 19) if season >= 2021 else range(1, 18)
 
-def sync_stats(start_season=START_SEASON, end_season=END_SEASON, season_type="regular"):
+def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular"):
     db = SessionLocal()
     total = 0
 

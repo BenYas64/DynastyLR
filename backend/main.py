@@ -1,4 +1,5 @@
 import json
+import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, or_
@@ -46,9 +47,21 @@ def eligible_positions_for_roster(roster_positions):
 def player_to_dict(player):
     return {c.name: getattr(player, c.name) for c in Player.__table__.columns}
 
-def season_points_subquery(db, league, season):
+POINTS_CACHE_TTL_SECONDS = 3600
+_points_cache = {}
+
+def season_points(db, league, season):
     """Per-player summed points for the season: a league's weighted scoring_settings
-    if available, otherwise standard PPR."""
+    if available, otherwise standard PPR. Cached in-process, since stats only change
+    on sync (weekly) and this is the same aggregation query behind every browse/sort
+    request - recomputing it live on every page view is what drained the DB's I/O
+    budget last time."""
+    cache_key = (league.league_id if league else None, season)
+    cached = _points_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached["computed_at"] < POINTS_CACHE_TTL_SECONDS:
+        return cached["points"]
+
     total = Stat.pts_ppr
     if league and league.scoring_settings:
         scoring_settings = json.loads(league.scoring_settings)
@@ -62,12 +75,15 @@ def season_points_subquery(db, league, season):
             for term in terms[1:]:
                 total = total + term
 
-    return (
+    rows = (
         db.query(Stat.player_id, func.sum(total).label("points"))
         .filter(Stat.season == season, Stat.season_type == "regular")
         .group_by(Stat.player_id)
-        .subquery()
+        .all()
     )
+    points = {player_id: pts or 0 for player_id, pts in rows}
+    _points_cache[cache_key] = {"computed_at": now, "points": points}
+    return points
 
 @app.get("/players/browse")
 def browse_players(
@@ -101,27 +117,22 @@ def browse_players(
         if rostered_ids:
             query = query.filter(Player.player_id.notin_(rostered_ids))
 
-    points_subq = season_points_subquery(db, league, season)
-    query = query.outerjoin(points_subq, Player.player_id == points_subq.c.player_id)
+    points = season_points(db, league, season)
 
-    total = query.count()
-
-    rows = (
-        query
-        .add_columns(points_subq.c.points)
-        .order_by(points_subq.c.points.desc().nullslast())
-        .offset(offset)
-        .limit(limit)
-        .all()
+    ranked = sorted(
+        query.all(),
+        key=lambda p: points.get(p.player_id, 0),
+        reverse=True,
     )
 
-    players = []
-    for player, points in rows:
+    total = len(ranked)
+    page = []
+    for player in ranked[offset:offset + limit]:
         data = player_to_dict(player)
-        data["points"] = points or 0
-        players.append(data)
+        data["points"] = points.get(player.player_id, 0)
+        page.append(data)
 
-    return {"total": total, "players": players}
+    return {"total": total, "players": page}
 
 @app.get("/players/{player_id}")
 def get_player(player_id: str, db: Session = Depends(get_db)):
