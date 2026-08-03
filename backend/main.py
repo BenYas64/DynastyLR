@@ -1,7 +1,7 @@
 import json
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup
 
@@ -18,59 +18,110 @@ app.add_middleware(
 def root():
     return {"message": "Fantasy Football API is running"}
 
-@app.get("/players")
-def get_players(db: Session = Depends(get_db)):
-    players = db.query(Player).filter(Player.active == True).all()
-    return players
-
-@app.get("/players/search")
-def search_players(q: str, db: Session = Depends(get_db)):
-    players = db.query(Player).filter(
-        Player.active == True,
-        Player.full_name.ilike(f"%{q}%")
-    ).limit(20).all()
-    return players
-
-@app.get("/players/points/{season}")
-def get_season_points(season: int, db: Session = Depends(get_db)):
-    rows = (
-        db.query(Stat.player_id, func.sum(Stat.pts_ppr).label("points"))
-        .filter(Stat.season == season, Stat.season_type == "regular")
-        .group_by(Stat.player_id)
-        .all()
-    )
-    return {player_id: points or 0 for player_id, points in rows}
+@app.get("/players/by-ids")
+def get_players_by_ids(ids: str, db: Session = Depends(get_db)):
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return []
+    return db.query(Player).filter(Player.player_id.in_(id_list)).all()
 
 NON_STAT_COLUMNS = {"player_id", "season", "week", "season_type", "team", "opponent"}
 
-@app.get("/league/{league_id}/points/{season}")
-def get_league_points(league_id: str, season: int, db: Session = Depends(get_db)):
-    league = db.query(League).filter(League.league_id == league_id).first()
-    if not league:
-        raise HTTPException(status_code=404, detail="League not found")
-    if not league.scoring_settings:
-        raise HTTPException(status_code=404, detail="League has no scoring settings")
+# FLEX-type roster slots don't literally match a player's fantasy_positions
+# (e.g. no player is tagged "FLEX"), so they're expanded to the positions
+# eligible to fill them.
+FLEX_ELIGIBLE_POSITIONS = {
+    "FLEX": ["RB", "WR", "TE"],
+    "SUPER_FLEX": ["QB", "RB", "WR", "TE"],
+    "WRRB_FLEX": ["WR", "RB"],
+    "REC_FLEX": ["WR", "TE"],
+}
 
-    scoring_settings = json.loads(league.scoring_settings)
-    terms = [
-        func.coalesce(getattr(Stat, key), 0) * weight
-        for key, weight in scoring_settings.items()
-        if weight and key not in NON_STAT_COLUMNS and hasattr(Stat, key)
-    ]
-    if not terms:
-        return {}
+def eligible_positions_for_roster(roster_positions):
+    eligible = set()
+    for slot in roster_positions:
+        eligible.update(FLEX_ELIGIBLE_POSITIONS.get(slot, [slot]))
+    return eligible
 
-    total = terms[0]
-    for term in terms[1:]:
-        total = total + term
+def player_to_dict(player):
+    return {c.name: getattr(player, c.name) for c in Player.__table__.columns}
 
-    rows = (
+def season_points_subquery(db, league, season):
+    """Per-player summed points for the season: a league's weighted scoring_settings
+    if available, otherwise standard PPR."""
+    total = Stat.pts_ppr
+    if league and league.scoring_settings:
+        scoring_settings = json.loads(league.scoring_settings)
+        terms = [
+            func.coalesce(getattr(Stat, key), 0) * weight
+            for key, weight in scoring_settings.items()
+            if weight and key not in NON_STAT_COLUMNS and hasattr(Stat, key)
+        ]
+        if terms:
+            total = terms[0]
+            for term in terms[1:]:
+                total = total + term
+
+    return (
         db.query(Stat.player_id, func.sum(total).label("points"))
         .filter(Stat.season == season, Stat.season_type == "regular")
         .group_by(Stat.player_id)
+        .subquery()
+    )
+
+@app.get("/players/browse")
+def browse_players(
+    q: str = "",
+    league_id: str | None = None,
+    available_only: bool = False,
+    season: int = 2025,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    limit = max(1, min(limit, 200))
+    league = db.query(League).filter(League.league_id == league_id).first() if league_id else None
+
+    query = db.query(Player).filter(Player.active == True)
+
+    if q:
+        query = query.filter(Player.full_name.ilike(f"%{q}%"))
+
+    if league and league.roster_positions:
+        eligible = eligible_positions_for_roster(json.loads(league.roster_positions))
+        if eligible:
+            query = query.filter(or_(*[Player.fantasy_positions.ilike(f'%"{pos}"%') for pos in eligible]))
+
+    if available_only and league_id:
+        rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
+        rostered_ids = set()
+        for r in rosters:
+            if r.players:
+                rostered_ids.update(r.players)
+        if rostered_ids:
+            query = query.filter(Player.player_id.notin_(rostered_ids))
+
+    points_subq = season_points_subquery(db, league, season)
+    query = query.outerjoin(points_subq, Player.player_id == points_subq.c.player_id)
+
+    total = query.count()
+
+    rows = (
+        query
+        .add_columns(points_subq.c.points)
+        .order_by(points_subq.c.points.desc().nullslast())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-    return {player_id: points or 0 for player_id, points in rows}
+
+    players = []
+    for player, points in rows:
+        data = player_to_dict(player)
+        data["points"] = points or 0
+        players.append(data)
+
+    return {"total": total, "players": players}
 
 @app.get("/players/{player_id}")
 def get_player(player_id: str, db: Session = Depends(get_db)):
