@@ -35,6 +35,8 @@ function rankColor(rank) {
   if (rank == null) return null
   if (rank <= 12) return { background: '#dbeafe', color: '#1e3a8a' }
   if (rank <= 24) return { background: '#dcfce7', color: '#14532d' }
+  if (rank <= 36) return { background: '#dcfce7', color: '#b5d31f' }
+  if (rank > 36) return { background: '#dcfce7', color: '#d31f1f' }
   return null
 }
 
