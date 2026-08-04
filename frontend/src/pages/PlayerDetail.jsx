@@ -30,6 +30,14 @@ function leagueScoreForStat(stat, scoringSettings) {
   return Object.keys(scoringSettings).reduce((total, key) => total + (stat[key] || 0) * scoringSettings[key], 0)
 }
 
+// Weekly positional rank coloring: top 12 = must-start, 13-24 = flex-worthy.
+function rankColor(rank) {
+  if (rank == null) return null
+  if (rank <= 12) return { background: '#dbeafe', color: '#1e3a8a' }
+  if (rank <= 24) return { background: '#dcfce7', color: '#14532d' }
+  return null
+}
+
 export default function PlayerDetail() {
   const { playerId } = useParams()
   const location = useLocation()
@@ -42,6 +50,7 @@ export default function PlayerDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedLeague, setSelectedLeague] = useState(null)
+  const [weeklyRanks, setWeeklyRanks] = useState({})
 
   useEffect(() => {
     setLoading(true)
@@ -73,6 +82,18 @@ export default function PlayerDetail() {
       .then(setSelectedLeague)
       .catch(() => setSelectedLeague(null))
   }, [selectedLeagueId])
+
+  useEffect(() => {
+    setWeeklyRanks({})
+  }, [selectedLeagueId, playerId])
+
+  useEffect(() => {
+    if (!selectedLeagueId || expandedSeason == null || weeklyRanks[expandedSeason]) return
+    fetch(`${API}/league/${selectedLeagueId}/players/${playerId}/weekly-rank/${expandedSeason}`)
+      .then(r => r.json())
+      .then(ranks => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: ranks })))
+      .catch(() => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: {} })))
+  }, [selectedLeagueId, expandedSeason, playerId, weeklyRanks])
 
   const scoringSettings = useMemo(() => {
     if (!selectedLeague?.scoring_settings) return null
@@ -206,14 +227,23 @@ export default function PlayerDetail() {
                               </tr>
                             </thead>
                             <tbody>
-                              {t.weeks.map(w => (
-                                <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
-                                  <td style={{ padding: '6px' }}>{w.leaguePts != null ? w.leaguePts.toFixed(2) : '-'}</td>
-                                  {WEEK_COLUMNS.map(([key]) => (
-                                    <td key={key} style={{ padding: '6px' }}>{w[key] ?? '-'}</td>
-                                  ))}
-                                </tr>
-                              ))}
+                              {t.weeks.map(w => {
+                                const rank = weeklyRanks[t.season]?.[w.week]
+                                const color = rankColor(rank)
+                                return (
+                                  <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
+                                    <td
+                                      style={{ padding: '6px', fontWeight: color ? 'bold' : 'normal', ...color }}
+                                      title={rank != null ? `#${rank} at ${player.position} that week` : undefined}
+                                    >
+                                      {w.leaguePts != null ? w.leaguePts.toFixed(2) : '-'}
+                                    </td>
+                                    {WEEK_COLUMNS.map(([key]) => (
+                                      <td key={key} style={{ padding: '6px' }}>{w[key] ?? '-'}</td>
+                                    ))}
+                                  </tr>
+                                )
+                              })}
                             </tbody>
                           </table>
                         </td>

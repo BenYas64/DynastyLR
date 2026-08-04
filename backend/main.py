@@ -47,21 +47,9 @@ def eligible_positions_for_roster(roster_positions):
 def player_to_dict(player):
     return {c.name: getattr(player, c.name) for c in Player.__table__.columns}
 
-POINTS_CACHE_TTL_SECONDS = 3600
-_points_cache = {}
-
-def season_points(db, league, season):
-    """Per-player summed points for the season: a league's weighted scoring_settings
-    if available, otherwise standard PPR. Cached in-process, since stats only change
-    on sync (weekly) and this is the same aggregation query behind every browse/sort
-    request - recomputing it live on every page view is what drained the DB's I/O
-    budget last time."""
-    cache_key = (league.league_id if league else None, season)
-    cached = _points_cache.get(cache_key)
-    now = time.time()
-    if cached and now - cached["computed_at"] < POINTS_CACHE_TTL_SECONDS:
-        return cached["points"]
-
+def scoring_expression(league):
+    """SQL expression for a single stat row's fantasy points: a league's weighted
+    scoring_settings if available, otherwise standard PPR."""
     total = Stat.pts_ppr
     if league and league.scoring_settings:
         scoring_settings = json.loads(league.scoring_settings)
@@ -74,9 +62,25 @@ def season_points(db, league, season):
             total = terms[0]
             for term in terms[1:]:
                 total = total + term
+    return total
+
+CACHE_TTL_SECONDS = 3600
+_points_cache = {}
+_position_rank_cache = {}
+
+def season_points(db, league, season):
+    """Per-player summed points for the season. Cached in-process, since stats only
+    change on sync (weekly) and this is the same aggregation query behind every
+    browse/sort request - recomputing it live on every page view is what drained
+    the DB's I/O budget last time."""
+    cache_key = (league.league_id if league else None, season)
+    cached = _points_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
+        return cached["points"]
 
     rows = (
-        db.query(Stat.player_id, func.sum(total).label("points"))
+        db.query(Stat.player_id, func.sum(scoring_expression(league)).label("points"))
         .filter(Stat.season == season, Stat.season_type == "regular")
         .group_by(Stat.player_id)
         .all()
@@ -84,6 +88,30 @@ def season_points(db, league, season):
     points = {player_id: pts or 0 for player_id, pts in rows}
     _points_cache[cache_key] = {"computed_at": now, "points": points}
     return points
+
+def position_week_ranks(db, league, season, position):
+    """Per-player weekly rank at `position` for the season (1 = highest score that
+    week), using the league's scoring. Cached per (league, season, position) since
+    the same rank table serves every player at that position - one query computes
+    it for everyone, rather than a query per player-detail-page view."""
+    cache_key = (league.league_id if league else None, season, position)
+    cached = _position_rank_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
+        return cached["ranks"]
+
+    rank_col = func.rank().over(partition_by=Stat.week, order_by=scoring_expression(league).desc())
+    rows = (
+        db.query(Stat.player_id, Stat.week, rank_col.label("rank"))
+        .join(Player, Player.player_id == Stat.player_id)
+        .filter(Stat.season == season, Stat.season_type == "regular", Player.position == position)
+        .all()
+    )
+    ranks = {}
+    for player_id, week, rank in rows:
+        ranks.setdefault(player_id, {})[week] = rank
+    _position_rank_cache[cache_key] = {"computed_at": now, "ranks": ranks}
+    return ranks
 
 @app.get("/players/browse")
 def browse_players(
@@ -143,6 +171,19 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
         Stat.season.desc(), Stat.week.desc()
     ).all()
     return {"player": player, "stats": stats}
+
+@app.get("/league/{league_id}/players/{player_id}/weekly-rank/{season}")
+def get_weekly_rank(league_id: str, player_id: str, season: int, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    player = db.query(Player).filter(Player.player_id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if not player.position:
+        return {}
+    ranks = position_week_ranks(db, league, season, player.position)
+    return ranks.get(player_id, {})
 
 @app.get("/leagues/{user_id}")
 def get_leagues(user_id: str, season: int = 2025, db: Session = Depends(get_db)):
