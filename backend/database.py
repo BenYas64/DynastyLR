@@ -362,6 +362,7 @@ class LeagueUser(Base):
     user_id = Column(String, primary_key=True)
     username = Column(String)
     display_name = Column(String)
+    commish = Column(Boolean, nullable=False, default=False)
 
 class Matchup(Base):
     __tablename__ = "matchups"
