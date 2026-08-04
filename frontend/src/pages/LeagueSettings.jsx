@@ -11,8 +11,9 @@ function humanizeKey(key) {
 }
 
 export default function LeagueSettings() {
-  const { selectedLeagueId } = useAccount()
+  const { user, selectedLeagueId } = useAccount()
   const [league, setLeague] = useState(null)
+  const [isCommish, setIsCommish] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -32,6 +33,20 @@ export default function LeagueSettings() {
         setLoading(false)
       })
   }, [selectedLeagueId])
+
+  useEffect(() => {
+    if (!selectedLeagueId || !user) {
+      setIsCommish(false)
+      return
+    }
+    fetch(`${API}/league/${selectedLeagueId}/users`)
+      .then(r => r.json())
+      .then(users => {
+        const me = users.find(u => u.user_id === user.user_id)
+        setIsCommish(!!me?.commish)
+      })
+      .catch(() => setIsCommish(false))
+  }, [selectedLeagueId, user])
 
   if (!selectedLeagueId) return (
     <p style={{ padding: '20px' }}>
@@ -59,6 +74,9 @@ export default function LeagueSettings() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+      {isCommish && (
+        <p style={{ fontWeight: 'bold', color: '#1a1a2e', marginBottom: '4px' }}>Commissioner View</p>
+      )}
       <h2>Scoring Settings</h2>
       <p style={{ color: '#666' }}>{league.name}</p>
 
