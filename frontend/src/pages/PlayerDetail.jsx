@@ -30,14 +30,15 @@ function leagueScoreForStat(stat, scoringSettings) {
   return Object.keys(scoringSettings).reduce((total, key) => total + (stat[key] || 0) * scoringSettings[key], 0)
 }
 
-// Weekly positional rank coloring: top 12 = must-start, 13-24 = flex-worthy.
+// Weekly positional rank coloring: top 12 = must-start, 13-24 = flex-worthy,
+// 25-36 = deep bench, 37+ = waiver-wire. Background carries the tier; text
+// stays white throughout.
 function rankColor(rank) {
   if (rank == null) return null
-  if (rank <= 12) return { background: '#dbeafe', color: '#1e3a8a' }
-  if (rank <= 24) return { background: '#dcfce7', color: '#14532d' }
-  if (rank <= 36) return { background: '#dcfce7', color: '#b5d31f' }
-  if (rank > 36) return { background: '#dcfce7', color: '#d31f1f' }
-  return null
+  if (rank <= 12) return '#2563eb'
+  if (rank <= 24) return '#16a34a'
+  if (rank <= 36) return '#d97706'
+  return '#dc2626'
 }
 
 export default function PlayerDetail() {
@@ -231,11 +232,11 @@ export default function PlayerDetail() {
                             <tbody>
                               {t.weeks.map(w => {
                                 const rank = weeklyRanks[t.season]?.[w.week]
-                                const color = rankColor(rank)
+                                const background = rankColor(rank)
                                 return (
                                   <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
                                     <td
-                                      style={{ padding: '6px', fontWeight: color ? 'bold' : 'normal', ...color }}
+                                      style={{ padding: '6px', fontWeight: background ? 'bold' : 'normal', background, color: background ? '#fff' : 'inherit' }}
                                       title={rank != null ? `#${rank} at ${player.position} that week` : undefined}
                                     >
                                       {w.leaguePts != null ? w.leaguePts.toFixed(2) : '-'}
