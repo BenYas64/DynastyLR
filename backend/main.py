@@ -2,6 +2,7 @@ import json
 import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup
@@ -201,6 +202,34 @@ def get_league(league_id: str, db: Session = Depends(get_db)):
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
     return league
+
+class ScoringSettingsUpdate(BaseModel):
+    user_id: str
+    scoring_settings: dict[str, float]
+
+@app.put("/league/{league_id}/scoring-settings")
+def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    membership = db.query(LeagueUser).filter(
+        LeagueUser.league_id == league_id,
+        LeagueUser.user_id == payload.user_id,
+    ).first()
+    if not membership or not membership.commish:
+        raise HTTPException(status_code=403, detail="Only the league commissioner can edit scoring settings")
+
+    league.scoring_settings = json.dumps(payload.scoring_settings)
+    db.commit()
+
+    # Points/rank caches are keyed by (league_id, ...) and hold up to an hour -
+    # without this they'd keep serving points computed under the old settings.
+    for cache in (_points_cache, _position_rank_cache):
+        for key in [k for k in cache if k[0] == league_id]:
+            del cache[key]
+
+    return {"league_id": league_id, "scoring_settings": payload.scoring_settings}
 
 @app.get("/league/{league_id}/rosters")
 def get_rosters(league_id: str, db: Session = Depends(get_db)):

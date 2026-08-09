@@ -1,0 +1,13 @@
+# Editor/tool config - not application code
+.claude/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets - never commit real credentials
+.env
+
+# OS
+.DS_Store
