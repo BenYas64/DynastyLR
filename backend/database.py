@@ -347,6 +347,8 @@ class League(Base):
     total_rosters = Column(Integer)
     scoring_settings = Column(String)
     roster_positions = Column(String)
+    playoff_week_start = Column(Integer)
+    previous_league_id = Column(String)
 
 class Roster(Base):
     __tablename__ = "rosters"
@@ -374,6 +376,17 @@ class Matchup(Base):
     matchup_id = Column(Integer)
     points = Column(Float)
     players = Column(Text)
+
+class BracketMatchup(Base):
+    __tablename__ = "bracket_matchups"
+    league_id = Column(String, primary_key=True)
+    bracket_type = Column(String, primary_key=True)  # "winners" or "losers"
+    match_id = Column(Integer, primary_key=True)
+    round = Column(Integer)
+    roster_id_1 = Column(Integer)
+    roster_id_2 = Column(Integer)
+    winner_roster_id = Column(Integer)
+    loser_roster_id = Column(Integer)
 
 def init_db():
     Base.metadata.create_all(bind=engine)

@@ -63,7 +63,7 @@ export default function Players() {
       <h2>Players ({total} total)</h2>
       <p style={{ color: '#666', fontSize: '14px' }}>
         {selectedLeague?.scoring_settings
-          ? `2025 points use ${selectedLeague.name}'s scoring settings.`
+          ? `2026 points use ${selectedLeague.name}'s scoring settings.`
           : 'Showing standard PPR points. Sign in and select a league on the Account page for that league\'s scoring.'}
       </p>
 
@@ -120,7 +120,7 @@ export default function Players() {
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Age</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
-            <th style={{ padding: '10px', textAlign: 'left' }}>2025 Points</th>
+            <th style={{ padding: '10px', textAlign: 'left' }}>2026 Points</th>
           </tr>
         </thead>
         <tbody>

@@ -20,7 +20,7 @@ const WEEK_COLUMNS = [
 
 const SUM_KEYS = WEEK_COLUMNS.filter(([key]) => key !== 'week').map(([key]) => key)
 
-const CURRENT_SEASON = 2025
+const CURRENT_SEASON = 2026
 
 // Each stat row has a column per Sleeper stat category (kicking, defense/IDP,
 // bonus thresholds, etc.), named the same as the matching scoring_settings

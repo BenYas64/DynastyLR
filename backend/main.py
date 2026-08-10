@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup
+from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup, BracketMatchup
 
 app = FastAPI()
 
@@ -119,7 +119,7 @@ def browse_players(
     q: str = "",
     league_id: str | None = None,
     available_only: bool = False,
-    season: int = 2025,
+    season: int = 2026,
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -187,14 +187,22 @@ def get_weekly_rank(league_id: str, player_id: str, season: int, db: Session = D
     return ranks.get(player_id, {})
 
 @app.get("/leagues/{user_id}")
-def get_leagues(user_id: str, season: int = 2025, db: Session = Depends(get_db)):
+def get_leagues(user_id: str, season: int | None = None, db: Session = Depends(get_db)):
     leagues = (
         db.query(League)
         .join(LeagueUser, LeagueUser.league_id == League.league_id)
-        .filter(LeagueUser.user_id == user_id, League.season == season)
+        .filter(LeagueUser.user_id == user_id)
         .all()
     )
-    return leagues
+    if season is not None:
+        return [l for l in leagues if l.season == season]
+
+    # No season given: return each league family's most recent known season,
+    # rather than a hardcoded year - not every league rolls over to the new
+    # season at the same time, so a fixed year would hide ones that haven't yet.
+    all_leagues = db.query(League).all()
+    superseded = {l.previous_league_id for l in all_leagues if l.previous_league_id}
+    return [l for l in leagues if l.league_id not in superseded]
 
 @app.get("/league/{league_id}")
 def get_league(league_id: str, db: Session = Depends(get_db)):
@@ -202,6 +210,30 @@ def get_league(league_id: str, db: Session = Depends(get_db)):
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
     return league
+
+@app.get("/league/{league_id}/history")
+def get_league_history(league_id: str, db: Session = Depends(get_db)):
+    all_leagues = db.query(League).all()
+    by_id = {l.league_id: l for l in all_leagues}
+    by_prev = {l.previous_league_id: l for l in all_leagues if l.previous_league_id}
+
+    if league_id not in by_id:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    chain = {league_id: by_id[league_id]}
+
+    cur = by_id[league_id]
+    while cur.previous_league_id and cur.previous_league_id in by_id and cur.previous_league_id not in chain:
+        cur = by_id[cur.previous_league_id]
+        chain[cur.league_id] = cur
+
+    cur = by_id[league_id]
+    while cur.league_id in by_prev and by_prev[cur.league_id].league_id not in chain:
+        cur = by_prev[cur.league_id]
+        chain[cur.league_id] = cur
+
+    ordered = sorted(chain.values(), key=lambda l: l.season or 0, reverse=True)
+    return [{"league_id": l.league_id, "season": l.season, "name": l.name} for l in ordered]
 
 class ScoringSettingsUpdate(BaseModel):
     user_id: str
@@ -266,6 +298,26 @@ def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
             "players": json.loads(m.players) if m.players else [],
         }
         for m in matchups
+    ]
+
+@app.get("/league/{league_id}/bracket/{bracket_type}")
+def get_bracket(league_id: str, bracket_type: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(BracketMatchup)
+        .filter(BracketMatchup.league_id == league_id, BracketMatchup.bracket_type == bracket_type)
+        .order_by(BracketMatchup.round, BracketMatchup.match_id)
+        .all()
+    )
+    return [
+        {
+            "match_id": m.match_id,
+            "round": m.round,
+            "roster_id_1": m.roster_id_1,
+            "roster_id_2": m.roster_id_2,
+            "winner_roster_id": m.winner_roster_id,
+            "loser_roster_id": m.loser_roster_id,
+        }
+        for m in rows
     ]
 
 @app.get("/league/{league_id}/users")

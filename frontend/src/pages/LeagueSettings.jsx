@@ -11,8 +11,9 @@ function humanizeKey(key) {
 }
 
 export default function LeagueSettings() {
-  const { user, selectedLeagueId } = useAccount()
+  const { user, selectedLeagueId, setSelectedLeagueId } = useAccount()
   const [league, setLeague] = useState(null)
+  const [history, setHistory] = useState([])
   const [isCommish, setIsCommish] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,6 +36,14 @@ export default function LeagueSettings() {
         setError(err.message)
         setLoading(false)
       })
+  }, [selectedLeagueId])
+
+  useEffect(() => {
+    if (!selectedLeagueId) return
+    fetch(`${API}/league/${selectedLeagueId}/history`)
+      .then(r => r.json())
+      .then(setHistory)
+      .catch(() => setHistory([]))
   }, [selectedLeagueId])
 
   useEffect(() => {
@@ -123,7 +132,20 @@ export default function LeagueSettings() {
         <p style={{ fontWeight: 'bold', color: '#1a1a2e', marginBottom: '4px' }}>Commissioner View</p>
       )}
       <h2>Scoring Settings</h2>
-      <p style={{ color: '#666' }}>{league.name}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <p style={{ color: '#666', margin: 0 }}>{league.name}</p>
+        {history.length > 1 && (
+          <select
+            value={selectedLeagueId}
+            onChange={e => setSelectedLeagueId(e.target.value)}
+            style={{ padding: '4px 8px', fontSize: '14px' }}
+          >
+            {history.map(h => (
+              <option key={h.league_id} value={h.league_id}>{h.season}</option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <input
         type="text"

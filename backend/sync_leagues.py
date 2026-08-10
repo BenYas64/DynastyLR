@@ -17,6 +17,7 @@ def sync_leagues():
             league = db.query(League).filter(League.league_id == league_id).first()
             league.scoring_settings = json.dumps(data.get("scoring_settings"))
             league.roster_positions = json.dumps(data.get("roster_positions"))
+            league.playoff_week_start = data.get("settings", {}).get("playoff_week_start")
             db.commit()
             print(f"{league_id}: {data.get('name')} updated")
 
