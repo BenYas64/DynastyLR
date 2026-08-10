@@ -20,14 +20,12 @@ def sync_users():
             for u in users_data:
                 user_stmt = insert(User).values(
                     user_id=u.get("user_id"),
-                    username=u.get("username"),
                     display_name=u.get("display_name"),
                     avatar=u.get("avatar"),
                 )
                 user_stmt = user_stmt.on_conflict_do_update(
                     index_elements=["user_id"],
                     set_={
-                        "username": user_stmt.excluded.username,
                         "display_name": user_stmt.excluded.display_name,
                         "avatar": user_stmt.excluded.avatar,
                     },
@@ -36,18 +34,16 @@ def sync_users():
 
                 # commish is set manually in Supabase - deliberately left out of the
                 # update set so an existing membership row's flag is never touched,
-                # only username/display_name stay in sync. New rows default to
-                # false via the column's server-side default.
+                # only display_name stays in sync. New rows default to false via
+                # the column's server-side default.
                 lu_stmt = insert(LeagueUser).values(
                     league_id=league_id,
                     user_id=u.get("user_id"),
-                    username=u.get("username"),
                     display_name=u.get("display_name"),
                 )
                 lu_stmt = lu_stmt.on_conflict_do_update(
                     index_elements=["league_id", "user_id"],
                     set_={
-                        "username": lu_stmt.excluded.username,
                         "display_name": lu_stmt.excluded.display_name,
                     },
                 )

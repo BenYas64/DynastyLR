@@ -335,7 +335,6 @@ class Stat(Base):
 class User(Base):
     __tablename__ = "users"
     user_id = Column(String, primary_key=True)
-    username = Column(String)
     display_name = Column(String)
     avatar = Column(String)
 
@@ -364,7 +363,6 @@ class LeagueUser(Base):
     __tablename__ = "league_users"
     league_id = Column(String, primary_key=True)
     user_id = Column(String, primary_key=True)
-    username = Column(String)
     display_name = Column(String)
     commish = Column(Boolean, nullable=False, default=False)
 

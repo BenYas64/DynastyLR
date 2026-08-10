@@ -281,13 +281,6 @@ def get_users(league_id: str, db: Session = Depends(get_db)):
         for lu, avatar in rows
     ]
 
-@app.get("/user/{username}")
-def get_user(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username.ilike(username)).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
-
 @app.get("/account/{display_name}")
 def get_account(display_name: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.display_name.ilike(display_name)).first()
