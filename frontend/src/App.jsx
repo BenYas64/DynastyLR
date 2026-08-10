@@ -1,5 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import League from './pages/League.jsx'
+import Matchups from './pages/Matchups.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import Players from './pages/Players.jsx'
@@ -15,6 +16,7 @@ function App() {
         <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px' }}>
           <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>🏈 Fantasy</Link>
           <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
+          <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
           <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
           <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
           <Link to="/players" style={{ color: '#ccc', textDecoration: 'none' }}>Players</Link>
@@ -23,6 +25,7 @@ function App() {
         <Routes>
           <Route path="/" element={<League />} />
           <Route path="/league" element={<League />} />
+          <Route path="/matchups" element={<Matchups />} />
           <Route path="/league-settings" element={<LeagueSettings />} />
           <Route path="/my-team" element={<MyTeam />} />
           <Route path="/players" element={<Players />} />
