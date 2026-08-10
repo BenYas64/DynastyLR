@@ -7,21 +7,31 @@ import Players from './pages/Players.jsx'
 import PlayerDetail from './pages/PlayerDetail.jsx'
 import Account from './pages/Account.jsx'
 import TeamRoster from './pages/TeamRoster.jsx'
-import { AccountProvider } from './AccountContext.jsx'
+import { AccountProvider, useAccount } from './AccountContext.jsx'
+
+function Nav() {
+  const { leagues, selectedLeagueId } = useAccount()
+  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
+
+  return (
+    <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+      <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>🏈 Fantasy</Link>
+      {selectedLeague && <span style={{ color: '#ccc' }}>{selectedLeague.name}</span>}
+      <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
+      <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
+      <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
+      <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
+      <Link to="/players" style={{ color: '#ccc', textDecoration: 'none' }}>Players</Link>
+      <Link to="/account" style={{ color: '#ccc', textDecoration: 'none' }}>Account</Link>
+    </nav>
+  )
+}
 
 function App() {
   return (
     <AccountProvider>
       <div>
-        <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px' }}>
-          <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>🏈 Fantasy</Link>
-          <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
-          <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
-          <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
-          <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
-          <Link to="/players" style={{ color: '#ccc', textDecoration: 'none' }}>Players</Link>
-          <Link to="/account" style={{ color: '#ccc', textDecoration: 'none' }}>Account</Link>
-        </nav>
+        <Nav />
         <Routes>
           <Route path="/" element={<League />} />
           <Route path="/league" element={<League />} />
