@@ -11,9 +11,9 @@ def sync_players():
     
     try:
         for player_id, p in data.items():
-            if not p.get("position") in ["QB","RB","WR","TE","K","DEF"]:
+            if not p.get("position"):
                 continue
-            
+
             player = db.query(Player).filter(Player.player_id == player_id).first()
             
             fp = p.get("fantasy_positions")
