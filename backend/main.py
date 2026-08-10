@@ -270,7 +270,16 @@ def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
 
 @app.get("/league/{league_id}/users")
 def get_users(league_id: str, db: Session = Depends(get_db)):
-    return db.query(LeagueUser).filter(LeagueUser.league_id == league_id).all()
+    rows = (
+        db.query(LeagueUser, User.avatar)
+        .outerjoin(User, User.user_id == LeagueUser.user_id)
+        .filter(LeagueUser.league_id == league_id)
+        .all()
+    )
+    return [
+        {**{c.name: getattr(lu, c.name) for c in LeagueUser.__table__.columns}, "avatar": avatar}
+        for lu, avatar in rows
+    ]
 
 @app.get("/user/{username}")
 def get_user(username: str, db: Session = Depends(get_db)):

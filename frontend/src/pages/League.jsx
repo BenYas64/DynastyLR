@@ -65,7 +65,16 @@ export default function League() {
                 style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
               >
                 <td style={{ padding: '10px' }}>{i + 1}</td>
-                <td style={{ padding: '10px' }}>{user?.display_name || 'Unknown'}</td>
+                <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {user?.avatar && (
+                    <img
+                      src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
+                      alt=""
+                      style={{ width: '24px', height: '24px', borderRadius: '50%' }}
+                    />
+                  )}
+                  {user?.display_name || 'Unknown'}
+                </td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.wins}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.losses}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.fpts}</td>
