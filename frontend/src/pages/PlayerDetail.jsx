@@ -30,15 +30,21 @@ function leagueScoreForStat(stat, scoringSettings) {
   return Object.keys(scoringSettings).reduce((total, key) => total + (stat[key] || 0) * scoringSettings[key], 0)
 }
 
-// Weekly positional rank coloring: top 12 = must-start, 13-24 = flex-worthy,
-// 25-36 = deep bench, 37+ = waiver-wire. Background carries the tier; text
-// stays white throughout.
-function rankColor(rank) {
+// Weekly positional rank coloring: must-start / flex-worthy / deep bench /
+// waiver-wire tiers, scaled down for QB and TE since leagues typically only
+// start 1 of each (vs. 2+ for RB/WR). Background carries the tier; text stays
+// white throughout.
+const QB_TE_TIERS = [8, 16, 24]
+const DEFAULT_TIERS = [12, 24, 36]
+const TIER_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626']
+
+function rankColor(rank, position) {
   if (rank == null) return null
-  if (rank <= 12) return '#2563eb'
-  if (rank <= 24) return '#16a34a'
-  if (rank <= 36) return '#d97706'
-  return '#dc2626'
+  const [tier1, tier2, tier3] = position === 'QB' || position === 'TE' ? QB_TE_TIERS : DEFAULT_TIERS
+  if (rank <= tier1) return TIER_COLORS[0]
+  if (rank <= tier2) return TIER_COLORS[1]
+  if (rank <= tier3) return TIER_COLORS[2]
+  return TIER_COLORS[3]
 }
 
 export default function PlayerDetail() {
@@ -232,7 +238,7 @@ export default function PlayerDetail() {
                             <tbody>
                               {t.weeks.map(w => {
                                 const rank = weeklyRanks[t.season]?.[w.week]
-                                const background = rankColor(rank)
+                                const background = rankColor(rank, player.position)
                                 return (
                                   <tr key={w.week} style={{ borderBottom: '1px solid #eee' }}>
                                     <td
