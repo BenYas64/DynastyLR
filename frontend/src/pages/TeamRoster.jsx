@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import RosterSlots from '../components/RosterSlots.jsx'
+import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -62,7 +63,16 @@ export default function TeamRoster() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <Link to="/league">&larr; Back to League</Link>
-      <h2 style={{ marginTop: '10px' }}>{owner?.display_name || 'Unknown'}</h2>
+      <h2 style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {teamAvatarUrl(roster, owner) && (
+          <img
+            src={teamAvatarUrl(roster, owner)}
+            alt=""
+            style={{ width: '32px', height: '32px', borderRadius: '50%' }}
+          />
+        )}
+        {teamName(roster, owner)}
+      </h2>
       <p>Record: {roster.settings.wins}W - {roster.settings.losses}L</p>
       <p>Points For: {roster.settings.fpts}</p>
       <RosterSlots

@@ -22,11 +22,14 @@ def sync_rosters():
             rows = []
             for r in data:
                 settings = r.get("settings") or {}
+                metadata = r.get("metadata") or {}
                 fpts = (settings.get("fpts") or 0) + (settings.get("fpts_decimal") or 0) / 100
                 rows.append({
                     "league_id": league.league_id,
                     "roster_id": r.get("roster_id"),
                     "owner_id": r.get("owner_id"),
+                    "team_name": metadata.get("team_name"),
+                    "team_avatar": metadata.get("avatar"),
                     "wins": settings.get("wins"),
                     "losses": settings.get("losses"),
                     "fpts": fpts,
@@ -39,6 +42,8 @@ def sync_rosters():
                 index_elements=["league_id", "roster_id"],
                 set_={
                     "owner_id": stmt.excluded.owner_id,
+                    "team_name": stmt.excluded.team_name,
+                    "team_avatar": stmt.excluded.team_avatar,
                     "wins": stmt.excluded.wins,
                     "losses": stmt.excluded.losses,
                     "fpts": stmt.excluded.fpts,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
+import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1)
@@ -83,7 +84,7 @@ export default function Matchups() {
     if (rosterId == null) return { name: 'TBD', avatar: null }
     const roster = rosterMap[rosterId]
     const user = roster ? users[roster.owner_id] : null
-    return { name: user?.display_name || `Roster ${rosterId}`, avatar: user?.avatar }
+    return { name: roster ? teamName(roster, user) : `Roster ${rosterId}`, avatar: teamAvatarUrl(roster, user) }
   }
 
   const isPlayoffWeek = league?.playoff_week_start > 0 && week >= league.playoff_week_start
@@ -242,7 +243,7 @@ function BracketTeamRow({ team, isWinner, onClick }) {
       }}
     >
       {team.avatar && (
-        <img src={`https://sleepercdn.com/avatars/thumbs/${team.avatar}`} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
+        <img src={team.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
       )}
       {team.name}
     </div>
@@ -258,7 +259,7 @@ function MatchupRow({ team, points, winner, onClick }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: winner ? 'bold' : 'normal' }}>
         {team.avatar && (
           <img
-            src={`https://sleepercdn.com/avatars/thumbs/${team.avatar}`}
+            src={team.avatar}
             alt=""
             style={{ width: '24px', height: '24px', borderRadius: '50%' }}
           />

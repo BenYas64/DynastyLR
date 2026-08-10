@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
+import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -58,6 +59,7 @@ export default function League() {
         <tbody>
           {sorted.map((roster, i) => {
             const user = users[roster.owner_id]
+            const avatarUrl = teamAvatarUrl(roster, user)
             return (
               <tr
                 key={roster.roster_id}
@@ -66,14 +68,14 @@ export default function League() {
               >
                 <td style={{ padding: '10px' }}>{i + 1}</td>
                 <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {user?.avatar && (
+                  {avatarUrl && (
                     <img
-                      src={`https://sleepercdn.com/avatars/thumbs/${user.avatar}`}
+                      src={avatarUrl}
                       alt=""
                       style={{ width: '24px', height: '24px', borderRadius: '50%' }}
                     />
                   )}
-                  {user?.display_name || 'Unknown'}
+                  {teamName(roster, user)}
                 </td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.wins}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.losses}</td>
