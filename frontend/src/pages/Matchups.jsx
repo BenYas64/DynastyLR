@@ -47,10 +47,14 @@ export default function Matchups() {
   const rosterMap = {}
   rosters.forEach(r => { rosterMap[r.roster_id] = r })
 
+  // A null matchup_id means Sleeper didn't pair this roster against anyone that
+  // week (e.g. non-playoff teams during playoff weeks) - each gets its own group
+  // instead of being bundled together under the same "null" key.
   const byMatchupId = {}
   matchups.forEach(m => {
-    if (!byMatchupId[m.matchup_id]) byMatchupId[m.matchup_id] = []
-    byMatchupId[m.matchup_id].push(m)
+    const key = m.matchup_id != null ? m.matchup_id : `solo-${m.roster_id}`
+    if (!byMatchupId[key]) byMatchupId[key] = []
+    byMatchupId[key].push(m)
   })
   const pairs = Object.values(byMatchupId)
 
