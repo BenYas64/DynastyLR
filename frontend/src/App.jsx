@@ -15,8 +15,7 @@ function Nav() {
 
   return (
     <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-      <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>🏈 Fantasy</Link>
-      {selectedLeague && <span style={{ color: '#ccc' }}>{selectedLeague.name}</span>}
+      <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{selectedLeague && <span style={{ color: '#ccc' }}>{selectedLeague.name}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
       <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
       <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
