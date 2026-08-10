@@ -14,7 +14,7 @@ function Nav() {
   const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
 
   return (
-    <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+    <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
       <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{selectedLeague && <span style={{ color: '#ccc' }}>{selectedLeague.name}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
       <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
