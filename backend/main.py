@@ -271,8 +271,6 @@ def get_rosters(league_id: str, db: Session = Depends(get_db)):
             "roster_id": r.roster_id,
             "owner_id": r.owner_id,
             "league_id": r.league_id,
-            "team_name": r.team_name,
-            "team_avatar": r.team_avatar,
             "players": r.players or [],
             "starters": r.starters or [],
             "settings": {"wins": r.wins, "losses": r.losses, "fpts": r.fpts},

@@ -59,7 +59,7 @@ export default function League() {
         <tbody>
           {sorted.map((roster, i) => {
             const user = users[roster.owner_id]
-            const avatarUrl = teamAvatarUrl(roster, user)
+            const avatarUrl = teamAvatarUrl(user)
             return (
               <tr
                 key={roster.roster_id}
@@ -75,7 +75,7 @@ export default function League() {
                       style={{ width: '24px', height: '24px', borderRadius: '50%' }}
                     />
                   )}
-                  {teamName(roster, user)}
+                  {teamName(user)}
                 </td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.wins}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.losses}</td>

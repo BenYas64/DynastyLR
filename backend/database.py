@@ -355,8 +355,6 @@ class Roster(Base):
     league_id = Column(String, primary_key=True)
     roster_id = Column(Integer, primary_key=True)
     owner_id = Column(String)
-    team_name = Column(String)
-    team_avatar = Column(String)
     wins = Column(Integer)
     losses = Column(Integer)
     fpts = Column(Float)
@@ -368,6 +366,8 @@ class LeagueUser(Base):
     league_id = Column(String, primary_key=True)
     user_id = Column(String, primary_key=True)
     display_name = Column(String)
+    team_name = Column(String)
+    team_avatar = Column(String)
     commish = Column(Boolean, nullable=False, default=False)
 
 class Matchup(Base):

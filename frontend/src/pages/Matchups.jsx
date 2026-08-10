@@ -84,7 +84,7 @@ export default function Matchups() {
     if (rosterId == null) return { name: 'TBD', avatar: null }
     const roster = rosterMap[rosterId]
     const user = roster ? users[roster.owner_id] : null
-    return { name: roster ? teamName(roster, user) : `Roster ${rosterId}`, avatar: teamAvatarUrl(roster, user) }
+    return { name: roster ? teamName(user) : `Roster ${rosterId}`, avatar: teamAvatarUrl(user) }
   }
 
   const isPlayoffWeek = league?.playoff_week_start > 0 && week >= league.playoff_week_start

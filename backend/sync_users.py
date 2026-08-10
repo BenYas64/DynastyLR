@@ -18,6 +18,7 @@ def sync_users():
             users_data = resp.json()
 
             for u in users_data:
+                metadata = u.get("metadata") or {}
                 user_stmt = insert(User).values(
                     user_id=u.get("user_id"),
                     display_name=u.get("display_name"),
@@ -40,11 +41,15 @@ def sync_users():
                     league_id=league_id,
                     user_id=u.get("user_id"),
                     display_name=u.get("display_name"),
+                    team_name=metadata.get("team_name"),
+                    team_avatar=metadata.get("avatar"),
                 )
                 lu_stmt = lu_stmt.on_conflict_do_update(
                     index_elements=["league_id", "user_id"],
                     set_={
                         "display_name": lu_stmt.excluded.display_name,
+                        "team_name": lu_stmt.excluded.team_name,
+                        "team_avatar": lu_stmt.excluded.team_avatar,
                     },
                 )
                 db.execute(lu_stmt)
