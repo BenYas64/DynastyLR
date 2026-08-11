@@ -111,7 +111,7 @@ export default function Matchups() {
           onClick={() => setView('weekly')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: view === 'weekly' ? '#93c5fd' : '#9ca3af',
+            background: view === 'weekly' ? '#93c5fd' : '#1a1a2e',
             color: view === 'weekly' ? '#1a1a2e' : '#fff',
           }}
         >
@@ -121,7 +121,7 @@ export default function Matchups() {
           onClick={() => setView('bracket')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: view === 'bracket' ? '#93c5fd' : '#9ca3af',
+            background: view === 'bracket' ? '#93c5fd' : '#1a1a2e',
             color: view === 'bracket' ? '#1a1a2e' : '#fff',
           }}
         >
