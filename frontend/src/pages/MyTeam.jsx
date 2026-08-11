@@ -10,7 +10,6 @@ export default function MyTeam() {
   const [rosterPositions, setRosterPositions] = useState(null)
   const [players, setPlayers] = useState({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
 
   const load = () => {
     if (!user || !selectedLeagueId) return
@@ -42,21 +41,6 @@ export default function MyTeam() {
 
   useEffect(load, [user, selectedLeagueId])
 
-  const handleCut = (playerId) => {
-    setError(null)
-    fetch(`${API}/league/${selectedLeagueId}/drop-player`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: user.user_id, player_id: playerId }),
-    })
-      .then(r => {
-        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to cut player') })
-        return r.json()
-      })
-      .then(load)
-      .catch(err => setError(err.message))
-  }
-
   if (!user || !selectedLeagueId) return (
     <p style={{ padding: '20px' }}>
       Sign in and select a league on the Account page to view your team.
@@ -70,7 +54,6 @@ export default function MyTeam() {
       <h2>My Team</h2>
       <p>Record: {roster.settings.wins}W - {roster.settings.losses}L</p>
       <p>Points For: {roster.settings.fpts}</p>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
       <RosterSlots
         rosterPositions={rosterPositions}
         starters={roster.starters}
@@ -78,8 +61,6 @@ export default function MyTeam() {
         playersMap={players}
         backTo="/my-team"
         backLabel="Back to My Team"
-        editable
-        onCut={handleCut}
       />
     </div>
   )

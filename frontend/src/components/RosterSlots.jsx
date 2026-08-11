@@ -65,7 +65,7 @@ const SLOT_LABELS = {
   SUPER_FLEX: 'SFLX',
 }
 
-export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel, editable, onCut }) {
+export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel }) {
   if (!rosterPositions || rosterPositions.length === 0) return null
 
   const rows = buildSlotRows(rosterPositions, starters, allPlayers, playersMap)
@@ -115,32 +115,13 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
                 {SLOT_LABELS[row.slot] || row.slot}
               </span>
               {player ? (
-                <>
-                  <Link
-                    to={`/players/${row.playerId}`}
-                    state={{ backTo, backLabel }}
-                    style={{ color: 'inherit' }}
-                  >
-                    {player.first_name} {player.last_name} - {player.position} - {player.team}
-                  </Link>
-                  {editable && (
-                    <button
-                      onClick={() => onCut(row.playerId)}
-                      style={{
-                        marginLeft: 'auto',
-                        padding: '4px 10px',
-                        fontSize: '12px',
-                        background: '#dc2626',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Cut
-                    </button>
-                  )}
-                </>
+                <Link
+                  to={`/players/${row.playerId}`}
+                  state={{ backTo, backLabel }}
+                  style={{ color: 'inherit' }}
+                >
+                  {player.first_name} {player.last_name} - {player.position} - {player.team}
+                </Link>
               ) : row.playerId ? (
                 <span>{row.playerId}</span>
               ) : (
