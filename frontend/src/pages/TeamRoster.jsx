@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import RosterSlots from '../components/RosterSlots.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
+import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
 export default function TeamRoster() {
   const { leagueId, rosterId } = useParams()
+  const { user } = useAccount()
   const [roster, setRoster] = useState(null)
   const [owner, setOwner] = useState(null)
   const [players, setPlayers] = useState({})
@@ -84,6 +86,10 @@ export default function TeamRoster() {
         playersMap={players}
         backTo={`/league/${leagueId}/roster/${rosterId}`}
         backLabel="Back to Roster"
+        editable={!!user && user.user_id === roster.owner_id}
+        leagueId={leagueId}
+        userId={user?.user_id}
+        onMoved={load}
       />
     </div>
   )
