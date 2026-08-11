@@ -5,7 +5,22 @@ import { Link } from 'react-router-dom'
 // order), followed by BN rows. Bench rows are padded to the league's BN count with
 // blanks, or extended (and flagged as overflow) if there are more bench players
 // than BN slots.
-function buildSlotRows(rosterPositions, starters, allPlayers) {
+const BENCH_POSITION_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3 }
+
+function sortBenchPlayerIds(ids, playersMap) {
+  return [...ids].sort((a, b) => {
+    const pa = playersMap[a]
+    const pb = playersMap[b]
+    const oa = BENCH_POSITION_ORDER[pa?.position] ?? 4
+    const ob = BENCH_POSITION_ORDER[pb?.position] ?? 4
+    if (oa !== ob) return oa - ob
+    const na = pa ? `${pa.last_name} ${pa.first_name}` : a
+    const nb = pb ? `${pb.last_name} ${pb.first_name}` : b
+    return na.localeCompare(nb)
+  })
+}
+
+function buildSlotRows(rosterPositions, starters, allPlayers, playersMap) {
   const starterSlots = rosterPositions.filter(p => p !== 'BN')
   const bnCount = rosterPositions.length - starterSlots.length
   const startersList = starters || []
@@ -15,7 +30,10 @@ function buildSlotRows(rosterPositions, starters, allPlayers) {
     return { slot, playerId: playerId && playerId !== '0' ? playerId : null, overflow: false, section: 'starter' }
   })
 
-  const benchPlayerIds = (allPlayers || []).filter(id => !startersList.includes(id))
+  const benchPlayerIds = sortBenchPlayerIds(
+    (allPlayers || []).filter(id => !startersList.includes(id)),
+    playersMap
+  )
   const benchRowCount = Math.max(bnCount, benchPlayerIds.length)
   for (let i = 0; i < benchRowCount; i++) {
     rows.push({
@@ -43,10 +61,14 @@ const SLOT_COLORS = {
   SUPER_FLEX: '#d32f2f',
 }
 
-export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel }) {
+const SLOT_LABELS = {
+  SUPER_FLEX: 'SFLX',
+}
+
+export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel, editable, onCut }) {
   if (!rosterPositions || rosterPositions.length === 0) return null
 
-  const rows = buildSlotRows(rosterPositions, starters, allPlayers)
+  const rows = buildSlotRows(rosterPositions, starters, allPlayers, playersMap)
 
   return (
     <div>
@@ -90,16 +112,35 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
                   background: row.overflow ? '#d32f2f' : SLOT_COLORS[row.slot] || '#e0e0e0',
                 }}
               >
-                {row.slot}
+                {SLOT_LABELS[row.slot] || row.slot}
               </span>
               {player ? (
-                <Link
-                  to={`/players/${row.playerId}`}
-                  state={{ backTo, backLabel }}
-                  style={{ color: 'inherit' }}
-                >
-                  {player.first_name} {player.last_name} - {player.position} - {player.team}
-                </Link>
+                <>
+                  <Link
+                    to={`/players/${row.playerId}`}
+                    state={{ backTo, backLabel }}
+                    style={{ color: 'inherit' }}
+                  >
+                    {player.first_name} {player.last_name} - {player.position} - {player.team}
+                  </Link>
+                  {editable && (
+                    <button
+                      onClick={() => onCut(row.playerId)}
+                      style={{
+                        marginLeft: 'auto',
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        background: '#dc2626',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cut
+                    </button>
+                  )}
+                </>
               ) : row.playerId ? (
                 <span>{row.playerId}</span>
               ) : (

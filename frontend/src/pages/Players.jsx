@@ -7,7 +7,7 @@ const PAGE_SIZE = 100
 
 export default function Players() {
   const navigate = useNavigate()
-  const { selectedLeagueId } = useAccount()
+  const { user, selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
@@ -16,6 +16,8 @@ export default function Players() {
   const [error, setError] = useState(null)
   const [filterMode, setFilterMode] = useState('all') // 'all' | 'available'
   const [selectedLeague, setSelectedLeague] = useState(null)
+  const [addingId, setAddingId] = useState(null)
+  const [addError, setAddError] = useState(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -33,7 +35,7 @@ export default function Players() {
       .catch(() => setSelectedLeague(null))
   }, [selectedLeagueId])
 
-  useEffect(() => {
+  const loadPlayers = () => {
     setLoading(true)
     setError(null)
 
@@ -53,7 +55,31 @@ export default function Players() {
         setError(err.message)
         setLoading(false)
       })
-  }, [debouncedSearch, selectedLeagueId, filterMode])
+  }
+
+  useEffect(loadPlayers, [debouncedSearch, selectedLeagueId, filterMode])
+
+  const handleAdd = (playerId) => {
+    setAddError(null)
+    setAddingId(playerId)
+    fetch(`${API}/league/${selectedLeagueId}/add-player`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.user_id, player_id: playerId }),
+    })
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to add player') })
+        return r.json()
+      })
+      .then(() => {
+        setAddingId(null)
+        loadPlayers()
+      })
+      .catch(err => {
+        setAddingId(null)
+        setAddError(err.message)
+      })
+  }
 
   if (loading) return <p style={{ padding: '20px' }}>Loading players...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
@@ -112,6 +138,8 @@ export default function Players() {
         <p style={{ color: '#666' }}>Sign in and select a league on the Account page to filter available players.</p>
       )}
 
+      {addError && <p style={{ color: 'red' }}>{addError}</p>}
+
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: 'rgb(155, 157, 157)' }}>
@@ -121,6 +149,7 @@ export default function Players() {
             <th style={{ padding: '10px', textAlign: 'left' }}>Age</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>2026 Points</th>
+            {filterMode === 'available' && <th style={{ padding: '10px', textAlign: 'left' }}></th>}
           </tr>
         </thead>
         <tbody>
@@ -138,6 +167,27 @@ export default function Players() {
                 {p.injury_status || 'Active'}
               </td>
               <td style={{ padding: '10px' }}>{(p.points || 0).toFixed(1)}</td>
+              {filterMode === 'available' && (
+                <td style={{ padding: '10px' }}>
+                  {user && (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleAdd(p.player_id) }}
+                      disabled={addingId === p.player_id}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '13px',
+                        background: '#16a34a',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: addingId === p.player_id ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {addingId === p.player_id ? 'Adding...' : 'Add'}
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

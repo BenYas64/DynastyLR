@@ -296,6 +296,55 @@ def get_rostered_players(league_id: str, db: Session = Depends(get_db)):
             player_ids.update(r.players)
     return sorted(player_ids)
 
+class RosterMove(BaseModel):
+    user_id: str
+    player_id: str
+
+@app.post("/league/{league_id}/drop-player")
+def drop_player(league_id: str, payload: RosterMove, db: Session = Depends(get_db)):
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.owner_id == payload.user_id
+    ).first()
+    if not roster:
+        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
+
+    players = list(roster.players or [])
+    if payload.player_id not in players:
+        raise HTTPException(status_code=400, detail="Player is not on your roster")
+    players.remove(payload.player_id)
+    roster.players = players
+    roster.starters = ['0' if s == payload.player_id else s for s in (roster.starters or [])]
+    db.commit()
+
+    return {"players": roster.players, "starters": roster.starters}
+
+@app.post("/league/{league_id}/add-player")
+def add_player(league_id: str, payload: RosterMove, db: Session = Depends(get_db)):
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.owner_id == payload.user_id
+    ).first()
+    if not roster:
+        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
+
+    player = db.query(Player).filter(Player.player_id == payload.player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    other_rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
+    rostered_ids = set()
+    for r in other_rosters:
+        if r.players:
+            rostered_ids.update(r.players)
+    if payload.player_id in rostered_ids:
+        raise HTTPException(status_code=400, detail="Player is already rostered in this league")
+
+    players = list(roster.players or [])
+    players.append(payload.player_id)
+    roster.players = players
+    db.commit()
+
+    return {"players": roster.players, "starters": roster.starters or []}
+
 @app.get("/league/{league_id}/matchups/{week}")
 def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
     matchups = db.query(Matchup).filter(Matchup.league_id == league_id, Matchup.week == week).all()
