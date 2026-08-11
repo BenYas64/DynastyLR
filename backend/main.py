@@ -209,7 +209,12 @@ def get_league(league_id: str, db: Session = Depends(get_db)):
     league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
-    return league
+
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    return {
+        **{c.name: getattr(league, c.name) for c in League.__table__.columns},
+        "is_current_season": not is_superseded,
+    }
 
 @app.get("/league/{league_id}/history")
 def get_league_history(league_id: str, db: Session = Depends(get_db)):
@@ -252,7 +257,8 @@ def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: 
     if not membership or not membership.commish:
         raise HTTPException(status_code=403, detail="Only the league commissioner can edit scoring settings")
 
-    if league.season != 2026:
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    if is_superseded:
         raise HTTPException(status_code=403, detail="Scoring settings for past seasons cannot be edited")
 
     league.scoring_settings = json.dumps(payload.scoring_settings)

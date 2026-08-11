@@ -11,7 +11,6 @@ import TeamRoster from './pages/TeamRoster.jsx'
 import { AccountProvider, useAccount } from './AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
-const CURRENT_SEASON = 2026
 
 function Nav() {
   const { selectedLeagueId } = useAccount()
@@ -29,7 +28,7 @@ function Nav() {
   }, [selectedLeagueId])
 
   const headerLabel = leagueInfo
-    ? leagueInfo.season && leagueInfo.season !== CURRENT_SEASON
+    ? !leagueInfo.is_current_season && leagueInfo.season
       ? `${leagueInfo.name} (${leagueInfo.season})`
       : leagueInfo.name
     : null

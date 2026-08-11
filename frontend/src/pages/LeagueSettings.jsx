@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
-const CURRENT_SEASON = 2026
 
 function humanizeKey(key) {
   return key
@@ -91,7 +90,7 @@ export default function LeagueSettings() {
 
   if (!scoringSettings) return <p style={{ padding: '20px' }}>No scoring settings found for this league.</p>
 
-  const canEdit = isCommish && league.season === CURRENT_SEASON
+  const canEdit = isCommish && league.is_current_season
 
   const entries = Object.keys(scoringSettings)
     .filter(key => {

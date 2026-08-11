@@ -12,7 +12,7 @@ function buildSlotRows(rosterPositions, starters, allPlayers) {
 
   const rows = starterSlots.map((slot, i) => {
     const playerId = startersList[i]
-    return { slot, playerId: playerId && playerId !== '0' ? playerId : null, overflow: false }
+    return { slot, playerId: playerId && playerId !== '0' ? playerId : null, overflow: false, section: 'starter' }
   })
 
   const benchPlayerIds = (allPlayers || []).filter(id => !startersList.includes(id))
@@ -22,10 +22,16 @@ function buildSlotRows(rosterPositions, starters, allPlayers) {
       slot: 'BN',
       playerId: benchPlayerIds[i] || null,
       overflow: i >= bnCount,
+      section: 'bench',
     })
   }
 
   return rows
+}
+
+const SECTION_LABELS = {
+  starter: 'Starters',
+  bench: 'Bench',
 }
 
 const SLOT_COLORS = {
@@ -46,45 +52,60 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
     <div>
       {rows.map((row, i) => {
         const player = row.playerId ? playersMap[row.playerId] : null
+        const showHeader = i === 0 || rows[i - 1].section !== row.section
         return (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '6px 0',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            <span
+          <div key={i}>
+            {showHeader && (
+              <h3
+                style={{
+                  margin: i === 0 ? '0 0 8px' : '20px 0 8px',
+                  fontSize: '14px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  color: '#666',
+                }}
+              >
+                {SECTION_LABELS[row.section]}
+              </h3>
+            )}
+            <div
               style={{
-                display: 'inline-block',
-                minWidth: '70px',
-                padding: '2px 8px',
-                marginRight: '12px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                textAlign: 'center',
-                color: row.overflow || SLOT_COLORS[row.slot] ? '#fff' : '#333',
-                background: row.overflow ? '#d32f2f' : SLOT_COLORS[row.slot] || '#e0e0e0',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px 0',
+                borderBottom: '1px solid #eee',
               }}
             >
-              {row.slot}
-            </span>
-            {player ? (
-              <Link
-                to={`/players/${row.playerId}`}
-                state={{ backTo, backLabel }}
-                style={{ color: 'inherit' }}
+              <span
+                style={{
+                  display: 'inline-block',
+                  minWidth: '70px',
+                  padding: '2px 8px',
+                  marginRight: '12px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  color: row.overflow || SLOT_COLORS[row.slot] ? '#fff' : '#333',
+                  background: row.overflow ? '#d32f2f' : SLOT_COLORS[row.slot] || '#e0e0e0',
+                }}
               >
-                {player.first_name} {player.last_name} - {player.position} - {player.team}
-              </Link>
-            ) : row.playerId ? (
-              <span>{row.playerId}</span>
-            ) : (
-              <span style={{ color: '#bbb' }}>Empty</span>
-            )}
+                {row.slot}
+              </span>
+              {player ? (
+                <Link
+                  to={`/players/${row.playerId}`}
+                  state={{ backTo, backLabel }}
+                  style={{ color: 'inherit' }}
+                >
+                  {player.first_name} {player.last_name} - {player.position} - {player.team}
+                </Link>
+              ) : row.playerId ? (
+                <span>{row.playerId}</span>
+              ) : (
+                <span style={{ color: '#bbb' }}>Empty</span>
+              )}
+            </div>
           </div>
         )
       })}
