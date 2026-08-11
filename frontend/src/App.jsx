@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import League from './pages/League.jsx'
 import Matchups from './pages/Matchups.jsx'
@@ -9,13 +10,33 @@ import Account from './pages/Account.jsx'
 import TeamRoster from './pages/TeamRoster.jsx'
 import { AccountProvider, useAccount } from './AccountContext.jsx'
 
+const API = 'https://api.dynastylr.site'
+const CURRENT_SEASON = 2026
+
 function Nav() {
-  const { leagues, selectedLeagueId } = useAccount()
-  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId)
+  const { selectedLeagueId } = useAccount()
+  const [leagueInfo, setLeagueInfo] = useState(null)
+
+  useEffect(() => {
+    if (!selectedLeagueId) {
+      setLeagueInfo(null)
+      return
+    }
+    fetch(`${API}/league/${selectedLeagueId}`)
+      .then(r => r.json())
+      .then(setLeagueInfo)
+      .catch(() => setLeagueInfo(null))
+  }, [selectedLeagueId])
+
+  const headerLabel = leagueInfo
+    ? leagueInfo.season && leagueInfo.season !== CURRENT_SEASON
+      ? `${leagueInfo.name} (${leagueInfo.season})`
+      : leagueInfo.name
+    : null
 
   return (
     <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
-      <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{selectedLeague && <span style={{ color: '#ccc' }}>{selectedLeague.name}</span>}</Link>
+      <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{headerLabel && <span style={{ color: '#ccc' }}>{headerLabel}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
       <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
       <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>

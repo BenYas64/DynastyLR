@@ -171,6 +171,7 @@ export default function LeagueSettings() {
                   <input
                     type="number"
                     step="any"
+                    className="no-spinner"
                     value={editedValues[key] ?? ''}
                     onChange={e => setEditedValues(prev => ({ ...prev, [key]: e.target.value }))}
                     style={{ width: '90px', padding: '4px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
