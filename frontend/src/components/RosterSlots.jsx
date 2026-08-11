@@ -351,7 +351,7 @@ export default function RosterSlots({
                     {opt.slotType === 'BN'
                       ? 'Move to bench'
                       : opt.occupant
-                        ? `Swap with ${opt.occupant.first_name} ${opt.occupant.last_name}`
+                        ? `${opt.occupant.first_name} ${opt.occupant.last_name} - ${opt.occupant.position} - ${opt.occupant.team}`
                         : 'Empty'}
                   </span>
                 </button>
