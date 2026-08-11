@@ -111,7 +111,7 @@ export default function Matchups() {
           onClick={() => setView('weekly')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: filterMode === 'all' ? '#93c5fd' : '#646cff',
+            background: filterMode === 'all' ? '#93c5fd' : '#1a1a2e',
             color: filterMode === 'all' ? '#1a1a2e' : '#fff',
           }}
         >
@@ -121,7 +121,7 @@ export default function Matchups() {
           onClick={() => setView('bracket')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: filterMode === 'all' ? '#93c5fd' : '#646cff',
+            background: filterMode === 'all' ? '#93c5fd' : '#1a1a2e',
             color: filterMode === 'all' ? '#1a1a2e' : '#fff',
           }}
         >

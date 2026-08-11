@@ -84,7 +84,7 @@ export default function Players() {
               fontSize: '14px',
               border: 'none',
               cursor: 'pointer',
-              background: filterMode === 'all' ? '#93c5fd' : '#646cff',
+              background: filterMode === 'all' ? '#93c5fd' : '#1a1a2e',
               color: filterMode === 'all' ? '#1a1a2e' : '#fff',
             }}
           >
@@ -99,7 +99,7 @@ export default function Players() {
               fontSize: '14px',
               border: 'none',
               cursor: selectedLeagueId ? 'pointer' : 'not-allowed',
-              background: filterMode === 'available' ? '#93c5fd' : '#646cff',
+              background: filterMode === 'available' ? '#93c5fd' : '#1a1a2e',
               color: filterMode === 'available' ? '#1a1a2e' : (selectedLeagueId ? '#fff' : '#d1d5db'),
             }}
           >
