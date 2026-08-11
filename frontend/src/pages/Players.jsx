@@ -84,8 +84,8 @@ export default function Players() {
               fontSize: '14px',
               border: 'none',
               cursor: 'pointer',
-              background: filterMode === 'all' ? '#1a1a2e' : '#fff',
-              color: filterMode === 'all' ? '#fff' : '#333',
+              background: filterMode === 'all' ? '#93c5fd' : '#9ca3af',
+              color: filterMode === 'all' ? '#1a1a2e' : '#fff',
             }}
           >
             All Players
@@ -99,8 +99,8 @@ export default function Players() {
               fontSize: '14px',
               border: 'none',
               cursor: selectedLeagueId ? 'pointer' : 'not-allowed',
-              background: filterMode === 'available' ? '#1a1a2e' : '#fff',
-              color: filterMode === 'available' ? '#fff' : (selectedLeagueId ? '#333' : '#aaa'),
+              background: filterMode === 'available' ? '#93c5fd' : '#9ca3af',
+              color: filterMode === 'available' ? '#1a1a2e' : (selectedLeagueId ? '#fff' : '#d1d5db'),
             }}
           >
             Available Players
