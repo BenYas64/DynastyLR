@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, Fragment } from 'react'
 import { useParams, useLocation, Link } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
+import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -52,7 +53,7 @@ export default function PlayerDetail() {
   const location = useLocation()
   const backTo = location.state?.backTo || '/players'
   const backLabel = location.state?.backLabel || 'Back to Players'
-  const { selectedLeagueId } = useAccount()
+  const { user, selectedLeagueId } = useAccount()
   const [player, setPlayer] = useState(null)
   const [stats, setStats] = useState([])
   const [expandedSeason, setExpandedSeason] = useState(null)
@@ -60,6 +61,10 @@ export default function PlayerDetail() {
   const [error, setError] = useState(null)
   const [selectedLeague, setSelectedLeague] = useState(null)
   const [weeklyRanks, setWeeklyRanks] = useState({})
+  const [owningRoster, setOwningRoster] = useState(null)
+  const [owningUser, setOwningUser] = useState(null)
+  const [cutting, setCutting] = useState(false)
+  const [cutError, setCutError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -95,6 +100,51 @@ export default function PlayerDetail() {
   useEffect(() => {
     setWeeklyRanks({})
   }, [selectedLeagueId, playerId])
+
+  const loadRosterOwner = () => {
+    if (!selectedLeagueId) {
+      setOwningRoster(null)
+      setOwningUser(null)
+      return
+    }
+    Promise.all([
+      fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
+      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json()),
+    ]).then(([rosters, users]) => {
+      const roster = rosters.find(r => (r.players || []).includes(playerId))
+      const userMap = {}
+      users.forEach(u => { userMap[u.user_id] = u })
+      setOwningRoster(roster || null)
+      setOwningUser(roster ? userMap[roster.owner_id] || null : null)
+    }).catch(() => {
+      setOwningRoster(null)
+      setOwningUser(null)
+    })
+  }
+
+  useEffect(loadRosterOwner, [selectedLeagueId, playerId])
+
+  const handleCut = () => {
+    setCutError(null)
+    setCutting(true)
+    fetch(`${API}/league/${selectedLeagueId}/drop-player`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.user_id, player_id: playerId }),
+    })
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to cut player') })
+        return r.json()
+      })
+      .then(() => {
+        setCutting(false)
+        loadRosterOwner()
+      })
+      .catch(err => {
+        setCutting(false)
+        setCutError(err.message)
+      })
+  }
 
   useEffect(() => {
     if (!selectedLeagueId || expandedSeason == null || weeklyRanks[expandedSeason]) return
@@ -165,6 +215,47 @@ export default function PlayerDetail() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <Link to={backTo}>&larr; {backLabel}</Link>
       <h2 style={{ marginTop: '10px' }}>{player.full_name}</h2>
+
+      {selectedLeagueId && (
+        <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {owningRoster ? (
+            <>
+              <span style={{ color: '#666', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Rostered by
+                {teamAvatarUrl(owningUser) && (
+                  <img
+                    src={teamAvatarUrl(owningUser)}
+                    alt=""
+                    style={{ width: '20px', height: '20px', borderRadius: '50%' }}
+                  />
+                )}
+                <strong>{teamName(owningUser)}</strong>
+              </span>
+              {user && owningRoster.owner_id === user.user_id && (
+                <button
+                  onClick={handleCut}
+                  disabled={cutting}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '13px',
+                    background: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: cutting ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {cutting ? 'Cutting...' : 'Cut'}
+                </button>
+              )}
+            </>
+          ) : (
+            <span style={{ color: '#16a34a', fontWeight: 'bold' }}>Free Agent</span>
+          )}
+        </div>
+      )}
+      {cutError && <p style={{ color: 'red' }}>{cutError}</p>}
+
       <table style={{ borderCollapse: 'collapse', marginTop: '10px' }}>
         <tbody>
           {fields.map(([label, value]) => (

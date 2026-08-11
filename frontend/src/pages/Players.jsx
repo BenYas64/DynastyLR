@@ -4,6 +4,8 @@ import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 const PAGE_SIZE = 100
+const CURRENT_SEASON = 2026
+const SEASON_OPTIONS = Array.from({ length: CURRENT_SEASON - 2017 + 1 }, (_, i) => CURRENT_SEASON - i)
 
 export default function Players() {
   const navigate = useNavigate()
@@ -15,6 +17,7 @@ export default function Players() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [filterMode, setFilterMode] = useState('all') // 'all' | 'available'
+  const [season, setSeason] = useState(2026)
   const [selectedLeague, setSelectedLeague] = useState(null)
   const [addingId, setAddingId] = useState(null)
   const [addError, setAddError] = useState(null)
@@ -39,7 +42,7 @@ export default function Players() {
     setLoading(true)
     setError(null)
 
-    const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), season: String(season) })
     if (debouncedSearch) params.set('q', debouncedSearch)
     if (selectedLeagueId) params.set('league_id', selectedLeagueId)
     if (filterMode === 'available' && selectedLeagueId) params.set('available_only', 'true')
@@ -57,7 +60,7 @@ export default function Players() {
       })
   }
 
-  useEffect(loadPlayers, [debouncedSearch, selectedLeagueId, filterMode])
+  useEffect(loadPlayers, [debouncedSearch, selectedLeagueId, filterMode, season])
 
   const handleAdd = (playerId) => {
     setAddError(null)
@@ -89,8 +92,8 @@ export default function Players() {
       <h2>Players ({total} total)</h2>
       <p style={{ color: '#666', fontSize: '14px' }}>
         {selectedLeague?.scoring_settings
-          ? `2026 points use ${selectedLeague.name}'s scoring settings.`
-          : 'Showing standard PPR points. Sign in and select a league on the Account page for that league\'s scoring.'}
+          ? `${season} points use ${selectedLeague.name}'s scoring settings.`
+          : `Showing standard PPR points for ${season}. Sign in and select a league on the Account page for that league's scoring.`}
       </p>
 
       <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '20px' }}>
@@ -101,6 +104,16 @@ export default function Players() {
           onChange={e => setSearch(e.target.value)}
           style={{ padding: '8px', width: '300px', fontSize: '16px' }}
         />
+
+        <select
+          value={season}
+          onChange={e => setSeason(Number(e.target.value))}
+          style={{ padding: '8px', fontSize: '14px' }}
+        >
+          {SEASON_OPTIONS.map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
 
         <div style={{ display: 'inline-flex', border: '1px solid #ccc', borderRadius: '20px', overflow: 'hidden' }}>
           <button
@@ -148,7 +161,7 @@ export default function Players() {
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Age</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
-            <th style={{ padding: '10px', textAlign: 'left' }}>2026 Points</th>
+            <th style={{ padding: '10px', textAlign: 'left' }}>{season} Points</th>
             {filterMode === 'available' && <th style={{ padding: '10px', textAlign: 'left' }}></th>}
           </tr>
         </thead>
