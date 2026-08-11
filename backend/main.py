@@ -345,6 +345,54 @@ def add_player(league_id: str, payload: RosterMove, db: Session = Depends(get_db
 
     return {"players": roster.players, "starters": roster.starters or []}
 
+class SlotMove(BaseModel):
+    user_id: str
+    player_id: str
+    slot_index: int | None = None  # index into starter slots (roster_positions minus BN); None = bench
+
+@app.post("/league/{league_id}/set-slot")
+def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.owner_id == payload.user_id
+    ).first()
+    if not roster:
+        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
+    if payload.player_id not in (roster.players or []):
+        raise HTTPException(status_code=400, detail="Player is not on your roster")
+
+    starter_slots = [p for p in json.loads(league.roster_positions or "[]") if p != "BN"]
+    starters = list(roster.starters or [])
+    starters += ["0"] * (len(starter_slots) - len(starters))
+
+    if payload.slot_index is not None:
+        if not (0 <= payload.slot_index < len(starter_slots)):
+            raise HTTPException(status_code=400, detail="Invalid slot")
+        eligible = FLEX_ELIGIBLE_POSITIONS.get(starter_slots[payload.slot_index], [starter_slots[payload.slot_index]])
+        player = db.query(Player).filter(Player.player_id == payload.player_id).first()
+        player_positions = json.loads(player.fantasy_positions) if player and player.fantasy_positions else ([player.position] if player else [])
+        if not any(p in eligible for p in player_positions):
+            raise HTTPException(status_code=400, detail=f"Player is not eligible for {starter_slots[payload.slot_index]}")
+
+    source_index = starters.index(payload.player_id) if payload.player_id in starters else None
+
+    if payload.slot_index is None:
+        if source_index is not None:
+            starters[source_index] = "0"
+    else:
+        displaced = starters[payload.slot_index]
+        starters[payload.slot_index] = payload.player_id
+        if source_index is not None:
+            starters[source_index] = displaced
+
+    roster.starters = starters
+    db.commit()
+
+    return {"players": roster.players, "starters": roster.starters}
+
 @app.get("/league/{league_id}/matchups/{week}")
 def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
     matchups = db.query(Matchup).filter(Matchup.league_id == league_id, Matchup.week == week).all()

@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+
+const API = 'https://api.dynastylr.site'
 
 // Builds one row per roster slot: starter slots (in league roster_positions order,
 // filled positionally from `starters`, which Sleeper always returns in that same
@@ -47,6 +50,34 @@ function buildSlotRows(rosterPositions, starters, allPlayers, playersMap) {
   return rows
 }
 
+// Slots like FLEX/SUPER_FLEX don't literally match a player's fantasy_positions
+// (no player is tagged "FLEX"), so they're expanded to the positions eligible
+// to fill them. Mirrors FLEX_ELIGIBLE_POSITIONS in backend/main.py.
+const FLEX_ELIGIBLE_POSITIONS = {
+  FLEX: ['RB', 'WR', 'TE'],
+  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
+  WRRB_FLEX: ['WR', 'RB'],
+  REC_FLEX: ['WR', 'TE'],
+}
+
+function playerPositions(player) {
+  if (!player) return []
+  if (player.fantasy_positions) {
+    try {
+      const parsed = JSON.parse(player.fantasy_positions)
+      if (Array.isArray(parsed) && parsed.length) return parsed
+    } catch {
+      // fall through to primary position
+    }
+  }
+  return player.position ? [player.position] : []
+}
+
+function eligibleForSlot(player, slotType) {
+  const eligible = FLEX_ELIGIBLE_POSITIONS[slotType] || [slotType]
+  return playerPositions(player).some(p => eligible.includes(p))
+}
+
 const SECTION_LABELS = {
   starter: 'Starters',
   bench: 'Bench',
@@ -65,16 +96,95 @@ const SLOT_LABELS = {
   SUPER_FLEX: 'SFLX',
 }
 
-export default function RosterSlots({ rosterPositions, starters, allPlayers, playersMap, backTo, backLabel }) {
+function slotChipStyle(slot, overflow, extra) {
+  return {
+    display: 'inline-block',
+    minWidth: '70px',
+    padding: '2px 8px',
+    marginRight: '12px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: overflow || SLOT_COLORS[slot] ? '#fff' : '#333',
+    background: overflow ? '#d32f2f' : SLOT_COLORS[slot] || '#e0e0e0',
+    ...extra,
+  }
+}
+
+export default function RosterSlots({
+  rosterPositions, starters, allPlayers, playersMap, backTo, backLabel,
+  editable, leagueId, userId, onMoved,
+}) {
+  const [pickerRow, setPickerRow] = useState(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveError, setMoveError] = useState(null)
+
+  useEffect(() => {
+    if (pickerRow === null) {
+      setSheetOpen(false)
+      return
+    }
+    const id = requestAnimationFrame(() => setSheetOpen(true))
+    return () => cancelAnimationFrame(id)
+  }, [pickerRow])
+
   if (!rosterPositions || rosterPositions.length === 0) return null
 
   const rows = buildSlotRows(rosterPositions, starters, allPlayers, playersMap)
+  const starterSlots = rosterPositions.filter(p => p !== 'BN')
+
+  const closePicker = () => {
+    setPickerRow(null)
+    setMoveError(null)
+  }
+
+  const handleMove = (playerId, slotIndex) => {
+    setMoving(true)
+    setMoveError(null)
+    fetch(`${API}/league/${leagueId}/set-slot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, player_id: playerId, slot_index: slotIndex }),
+    })
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to move player') })
+        return r.json()
+      })
+      .then(() => {
+        setMoving(false)
+        closePicker()
+        onMoved && onMoved()
+      })
+      .catch(err => {
+        setMoving(false)
+        setMoveError(err.message)
+      })
+  }
+
+  const pickerRowData = pickerRow !== null ? rows[pickerRow] : null
+  const pickerPlayer = pickerRowData?.playerId ? playersMap[pickerRowData.playerId] : null
+
+  const options = []
+  if (pickerRowData) {
+    starterSlots.forEach((slotType, i) => {
+      if (i === pickerRow) return
+      if (!eligibleForSlot(pickerPlayer, slotType)) return
+      const occupantId = rows[i]?.playerId
+      options.push({ slotIndex: i, slotType, occupant: occupantId ? playersMap[occupantId] : null })
+    })
+    if (pickerRowData.section !== 'bench') {
+      options.push({ slotIndex: null, slotType: 'BN', occupant: null })
+    }
+  }
 
   return (
     <div>
       {rows.map((row, i) => {
         const player = row.playerId ? playersMap[row.playerId] : null
         const showHeader = i === 0 || rows[i - 1].section !== row.section
+        const clickable = editable && player
         return (
           <div key={i}>
             {showHeader && (
@@ -99,18 +209,8 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
               }}
             >
               <span
-                style={{
-                  display: 'inline-block',
-                  minWidth: '70px',
-                  padding: '2px 8px',
-                  marginRight: '12px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  color: row.overflow || SLOT_COLORS[row.slot] ? '#fff' : '#333',
-                  background: row.overflow ? '#d32f2f' : SLOT_COLORS[row.slot] || '#e0e0e0',
-                }}
+                onClick={clickable ? () => setPickerRow(i) : undefined}
+                style={slotChipStyle(row.slot, row.overflow, { cursor: clickable ? 'pointer' : 'default' })}
               >
                 {SLOT_LABELS[row.slot] || row.slot}
               </span>
@@ -131,6 +231,82 @@ export default function RosterSlots({ rosterPositions, starters, allPlayers, pla
           </div>
         )
       })}
+
+      {pickerRowData && (
+        <>
+          <div
+            onClick={closePicker}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000 }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              maxHeight: '60vh',
+              overflowY: 'auto',
+              background: '#fff',
+              color: '#1a1a2e',
+              borderTopLeftRadius: '16px',
+              borderTopRightRadius: '16px',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.25)',
+              padding: '16px 20px 24px',
+              zIndex: 1001,
+              transform: sheetOpen ? 'translateY(0)' : 'translateY(100%)',
+              transition: 'transform 0.25s ease-out',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0 }}>
+                Move {pickerPlayer ? `${pickerPlayer.first_name} ${pickerPlayer.last_name}` : 'Player'}
+              </h3>
+              <button
+                onClick={closePicker}
+                style={{ background: 'none', border: 'none', fontSize: '22px', lineHeight: 1, cursor: 'pointer', color: '#1a1a2e' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {moveError && <p style={{ color: 'red' }}>{moveError}</p>}
+
+            {options.length === 0 ? (
+              <p style={{ color: '#666' }}>No other eligible slots.</p>
+            ) : (
+              options.map(opt => (
+                <button
+                  key={opt.slotIndex ?? 'bench'}
+                  disabled={moving}
+                  onClick={() => handleMove(pickerRowData.playerId, opt.slotIndex)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    padding: '10px',
+                    marginBottom: '8px',
+                    border: '1px solid #eee',
+                    borderRadius: '8px',
+                    background: '#fff',
+                    cursor: moving ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <span style={slotChipStyle(opt.slotType, false)}>
+                    {SLOT_LABELS[opt.slotType] || opt.slotType}
+                  </span>
+                  <span>
+                    {opt.slotType === 'BN'
+                      ? 'Move to bench'
+                      : opt.occupant
+                        ? `Swap with ${opt.occupant.first_name} ${opt.occupant.last_name}`
+                        : 'Empty'}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

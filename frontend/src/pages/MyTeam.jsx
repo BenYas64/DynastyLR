@@ -61,6 +61,10 @@ export default function MyTeam() {
         playersMap={players}
         backTo="/my-team"
         backLabel="Back to My Team"
+        editable
+        leagueId={selectedLeagueId}
+        userId={user.user_id}
+        onMoved={load}
       />
     </div>
   )
