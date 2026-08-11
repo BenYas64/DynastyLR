@@ -267,8 +267,8 @@ export default function RosterSlots({
               bottom: 0,
               maxHeight: '60vh',
               overflowY: 'auto',
-              background: '#fff',
-              color: '#1a1a2e',
+              background: '#1a1a2e',
+              color: '#fff',
               borderTopLeftRadius: '16px',
               borderTopRightRadius: '16px',
               boxShadow: '0 -4px 20px rgba(0,0,0,0.25)',
@@ -286,17 +286,17 @@ export default function RosterSlots({
               </h3>
               <button
                 onClick={closePicker}
-                style={{ background: 'none', border: 'none', fontSize: '22px', lineHeight: 1, cursor: 'pointer', color: '#1a1a2e' }}
+                style={{ background: 'none', border: 'none', fontSize: '22px', lineHeight: 1, cursor: 'pointer', color: '#fff' }}
               >
                 &times;
               </button>
             </div>
 
-            {moveError && <p style={{ color: 'red' }}>{moveError}</p>}
+            {moveError && <p style={{ color: '#ff6b6b' }}>{moveError}</p>}
 
             {fillMode ? (
               fillCandidates.length === 0 ? (
-                <p style={{ color: '#666' }}>No eligible players on your roster for this spot.</p>
+                <p style={{ color: '#aaa' }}>No eligible players on your roster for this spot.</p>
               ) : (
                 fillCandidates.map(c => (
                   <button
@@ -309,9 +309,10 @@ export default function RosterSlots({
                       width: '100%',
                       padding: '10px',
                       marginBottom: '8px',
-                      border: '1px solid #eee',
+                      border: '1px solid #33334d',
                       borderRadius: '8px',
-                      background: '#fff',
+                      background: '#242444',
+                      color: '#fff',
                       cursor: moving ? 'not-allowed' : 'pointer',
                     }}
                   >
@@ -325,7 +326,7 @@ export default function RosterSlots({
                 ))
               )
             ) : options.length === 0 ? (
-              <p style={{ color: '#666' }}>No other eligible slots.</p>
+              <p style={{ color: '#aaa' }}>No other eligible slots.</p>
             ) : (
               options.map(opt => (
                 <button
@@ -338,9 +339,10 @@ export default function RosterSlots({
                     width: '100%',
                     padding: '10px',
                     marginBottom: '8px',
-                    border: '1px solid #eee',
+                    border: '1px solid #33334d',
                     borderRadius: '8px',
-                    background: '#fff',
+                    background: '#242444',
+                    color: '#fff',
                     cursor: moving ? 'not-allowed' : 'pointer',
                   }}
                 >
