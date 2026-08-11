@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 
 const API = 'https://api.dynastylr.site'
+const CURRENT_SEASON = 2026
 
 function humanizeKey(key) {
   return key
@@ -90,6 +91,8 @@ export default function LeagueSettings() {
 
   if (!scoringSettings) return <p style={{ padding: '20px' }}>No scoring settings found for this league.</p>
 
+  const canEdit = isCommish && league.season === CURRENT_SEASON
+
   const entries = Object.keys(scoringSettings)
     .filter(key => {
       const q = search.toLowerCase()
@@ -129,7 +132,9 @@ export default function LeagueSettings() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       {isCommish && (
-        <p style={{ fontWeight: 'bold', color: '#1a1a2e', marginBottom: '4px' }}>Commissioner View</p>
+        <p style={{ fontWeight: 'bold', color: '#1a1a2e', marginBottom: '4px' }}>
+          Commissioner View{!canEdit && ' (read-only — past season)'}
+        </p>
       )}
       <h2>Scoring Settings</h2>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -167,7 +172,7 @@ export default function LeagueSettings() {
             <tr key={key} style={{ borderBottom: '1px solid #eee' }}>
               <td style={{ padding: '8px' }} title={key}>{humanizeKey(key)}</td>
               <td style={{ padding: '8px', textAlign: 'right' }}>
-                {isCommish ? (
+                {canEdit ? (
                   <input
                     type="number"
                     step="any"
@@ -186,7 +191,7 @@ export default function LeagueSettings() {
       </table>
       {entries.length === 0 && <p style={{ color: '#666' }}>No settings match your search.</p>}
 
-      {isCommish && (
+      {canEdit && (
         <div style={{ marginTop: '20px' }}>
           <button
             onClick={handleSave}

@@ -252,6 +252,9 @@ def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: 
     if not membership or not membership.commish:
         raise HTTPException(status_code=403, detail="Only the league commissioner can edit scoring settings")
 
+    if league.season != 2026:
+        raise HTTPException(status_code=403, detail="Scoring settings for past seasons cannot be edited")
+
     league.scoring_settings = json.dumps(payload.scoring_settings)
     db.commit()
 
