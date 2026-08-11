@@ -111,8 +111,8 @@ export default function Matchups() {
           onClick={() => setView('weekly')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: view === 'weekly' ? '#1a1a2e' : '#fff',
-            color: view === 'weekly' ? '#fff' : '#333',
+            background: filterMode === 'all' ? '#93c5fd' : '#646cff',
+            color: filterMode === 'all' ? '#1a1a2e' : '#fff',
           }}
         >
           Weekly
@@ -121,8 +121,8 @@ export default function Matchups() {
           onClick={() => setView('bracket')}
           style={{
             padding: '8px 16px', fontSize: '14px', border: 'none', cursor: 'pointer',
-            background: view === 'bracket' ? '#1a1a2e' : '#fff',
-            color: view === 'bracket' ? '#fff' : '#333',
+            background: filterMode === 'all' ? '#93c5fd' : '#646cff',
+            color: filterMode === 'all' ? '#1a1a2e' : '#fff',
           }}
         >
           Playoff Bracket
