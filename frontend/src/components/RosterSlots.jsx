@@ -165,9 +165,17 @@ export default function RosterSlots({
 
   const pickerRowData = pickerRow !== null ? rows[pickerRow] : null
   const pickerPlayer = pickerRowData?.playerId ? playersMap[pickerRowData.playerId] : null
+  const fillMode = pickerRowData ? !pickerRowData.playerId : false
+
+  const startersList = starters || []
+  const currentSlotLabel = (playerId) => {
+    const idx = startersList.indexOf(playerId)
+    if (idx === -1 || idx >= starterSlots.length) return 'Bench'
+    return SLOT_LABELS[starterSlots[idx]] || starterSlots[idx]
+  }
 
   const options = []
-  if (pickerRowData) {
+  if (pickerRowData && !fillMode) {
     starterSlots.forEach((slotType, i) => {
       if (i === pickerRow) return
       if (!eligibleForSlot(pickerPlayer, slotType)) return
@@ -179,12 +187,25 @@ export default function RosterSlots({
     }
   }
 
+  const fillCandidates = []
+  if (pickerRowData && fillMode) {
+    const slotType = pickerRowData.slot
+    ;(allPlayers || []).forEach(id => {
+      const p = playersMap[id]
+      if (!p || !eligibleForSlot(p, slotType)) return
+      fillCandidates.push({ playerId: id, player: p, currentLabel: currentSlotLabel(id) })
+    })
+    fillCandidates.sort((a, b) =>
+      `${a.player.last_name} ${a.player.first_name}`.localeCompare(`${b.player.last_name} ${b.player.first_name}`)
+    )
+  }
+
   return (
     <div>
       {rows.map((row, i) => {
         const player = row.playerId ? playersMap[row.playerId] : null
         const showHeader = i === 0 || rows[i - 1].section !== row.section
-        const clickable = editable && player
+        const clickable = editable && (player || row.section === 'starter')
         return (
           <div key={i}>
             {showHeader && (
@@ -259,7 +280,9 @@ export default function RosterSlots({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <h3 style={{ margin: 0 }}>
-                Move {pickerPlayer ? `${pickerPlayer.first_name} ${pickerPlayer.last_name}` : 'Player'}
+                {fillMode
+                  ? `Fill ${SLOT_LABELS[pickerRowData.slot] || pickerRowData.slot}`
+                  : `Move ${pickerPlayer ? `${pickerPlayer.first_name} ${pickerPlayer.last_name}` : 'Player'}`}
               </h3>
               <button
                 onClick={closePicker}
@@ -271,7 +294,37 @@ export default function RosterSlots({
 
             {moveError && <p style={{ color: 'red' }}>{moveError}</p>}
 
-            {options.length === 0 ? (
+            {fillMode ? (
+              fillCandidates.length === 0 ? (
+                <p style={{ color: '#666' }}>No eligible players on your roster for this spot.</p>
+              ) : (
+                fillCandidates.map(c => (
+                  <button
+                    key={c.playerId}
+                    disabled={moving}
+                    onClick={() => handleMove(c.playerId, pickerRow)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
+                      padding: '10px',
+                      marginBottom: '8px',
+                      border: '1px solid #eee',
+                      borderRadius: '8px',
+                      background: '#fff',
+                      cursor: moving ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <span style={slotChipStyle(c.currentLabel === 'Bench' ? 'BN' : c.player.position, false)}>
+                      {c.currentLabel}
+                    </span>
+                    <span>
+                      {c.player.first_name} {c.player.last_name} - {c.player.position} - {c.player.team}
+                    </span>
+                  </button>
+                ))
+              )
+            ) : options.length === 0 ? (
               <p style={{ color: '#666' }}>No other eligible slots.</p>
             ) : (
               options.map(opt => (
