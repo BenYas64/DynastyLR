@@ -65,6 +65,8 @@ export default function PlayerDetail() {
   const [owningUser, setOwningUser] = useState(null)
   const [cutting, setCutting] = useState(false)
   const [cutError, setCutError] = useState(null)
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -143,6 +145,28 @@ export default function PlayerDetail() {
       .catch(err => {
         setCutting(false)
         setCutError(err.message)
+      })
+  }
+
+  const handleAdd = () => {
+    setAddError(null)
+    setAdding(true)
+    fetch(`${API}/league/${selectedLeagueId}/add-player`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.user_id, player_id: playerId }),
+    })
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to add player') })
+        return r.json()
+      })
+      .then(() => {
+        setAdding(false)
+        loadRosterOwner()
+      })
+      .catch(err => {
+        setAdding(false)
+        setAddError(err.message)
       })
   }
 
@@ -250,11 +274,30 @@ export default function PlayerDetail() {
               )}
             </>
           ) : (
-            <span style={{ color: '#16a34a', fontWeight: 'bold' }}>Free Agent</span>
+            <>
+              <span style={{ color: '#16a34a', fontWeight: 'bold' }}>Free Agent</span>
+              {user && (
+                <button
+                  onClick={handleAdd}
+                  disabled={adding}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '13px',
+                    background: '#16a34a',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: adding ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {adding ? 'Adding...' : 'Add'}
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
-      {cutError && <p style={{ color: 'red' }}>{cutError}</p>}
+      {(cutError || addError) && <p style={{ color: 'red' }}>{cutError || addError}</p>}
 
       <table style={{ borderCollapse: 'collapse', marginTop: '10px' }}>
         <tbody>
