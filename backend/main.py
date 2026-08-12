@@ -386,7 +386,20 @@ def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
         displaced = starters[payload.slot_index]
         starters[payload.slot_index] = payload.player_id
         if source_index is not None:
-            starters[source_index] = displaced
+            # The displaced player only backfills the mover's old slot if they're
+            # actually eligible for it - otherwise (e.g. a WR displaced from SFLX
+            # can't legally fill a QB-only slot) they go to the bench instead.
+            displaced_eligible = displaced == "0"
+            if not displaced_eligible:
+                displaced_player = db.query(Player).filter(Player.player_id == displaced).first()
+                displaced_positions = (
+                    json.loads(displaced_player.fantasy_positions)
+                    if displaced_player and displaced_player.fantasy_positions
+                    else ([displaced_player.position] if displaced_player else [])
+                )
+                source_eligible = FLEX_ELIGIBLE_POSITIONS.get(starter_slots[source_index], [starter_slots[source_index]])
+                displaced_eligible = any(p in source_eligible for p in displaced_positions)
+            starters[source_index] = displaced if displaced_eligible else "0"
 
     roster.starters = starters
     db.commit()
