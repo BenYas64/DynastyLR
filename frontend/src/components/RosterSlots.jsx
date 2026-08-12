@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { usePlayerModal } from '../PlayerModalContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 
@@ -113,9 +113,10 @@ function slotChipStyle(slot, overflow, extra) {
 }
 
 export default function RosterSlots({
-  rosterPositions, starters, allPlayers, playersMap, backTo, backLabel,
+  rosterPositions, starters, allPlayers, playersMap,
   editable, leagueId, userId, onMoved,
 }) {
+  const { openPlayer } = usePlayerModal()
   const [pickerRow, setPickerRow] = useState(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [moving, setMoving] = useState(false)
@@ -236,13 +237,12 @@ export default function RosterSlots({
                 {SLOT_LABELS[row.slot] || row.slot}
               </span>
               {player ? (
-                <Link
-                  to={`/players/${row.playerId}`}
-                  state={{ backTo, backLabel }}
-                  style={{ color: 'inherit' }}
+                <span
+                  onClick={() => openPlayer(row.playerId)}
+                  style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline dotted' }}
                 >
                   {player.first_name} {player.last_name} - {player.position} - {player.team}
-                </Link>
+                </span>
               ) : row.playerId ? (
                 <span>{row.playerId}</span>
               ) : (

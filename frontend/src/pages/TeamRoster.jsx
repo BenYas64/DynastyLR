@@ -84,8 +84,6 @@ export default function TeamRoster() {
         starters={roster.starters}
         allPlayers={roster.players}
         playersMap={players}
-        backTo={`/league/${leagueId}/roster/${rosterId}`}
-        backLabel="Back to Roster"
         editable={!!user && user.user_id === roster.owner_id}
         leagueId={leagueId}
         userId={user?.user_id}

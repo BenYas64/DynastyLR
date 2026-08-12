@@ -5,10 +5,11 @@ import Matchups from './pages/Matchups.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import Players from './pages/Players.jsx'
-import PlayerDetail from './pages/PlayerDetail.jsx'
 import Account from './pages/Account.jsx'
 import TeamRoster from './pages/TeamRoster.jsx'
 import { AccountProvider, useAccount } from './AccountContext.jsx'
+import { PlayerModalProvider } from './PlayerModalContext.jsx'
+import PlayerDetailModal from './components/PlayerDetailModal.jsx'
 
 const API = 'https://api.dynastylr.site'
 
@@ -49,20 +50,22 @@ function Nav() {
 function App() {
   return (
     <AccountProvider>
-      <div>
-        <Nav />
-        <Routes>
-          <Route path="/" element={<League />} />
-          <Route path="/league" element={<League />} />
-          <Route path="/matchups" element={<Matchups />} />
-          <Route path="/league-settings" element={<LeagueSettings />} />
-          <Route path="/my-team" element={<MyTeam />} />
-          <Route path="/players" element={<Players />} />
-          <Route path="/players/:playerId" element={<PlayerDetail />} />
-          <Route path="/account" element={<Account />} />
-          <Route path="/league/:leagueId/roster/:rosterId" element={<TeamRoster />} />
-        </Routes>
-      </div>
+      <PlayerModalProvider>
+        <div>
+          <Nav />
+          <Routes>
+            <Route path="/" element={<League />} />
+            <Route path="/league" element={<League />} />
+            <Route path="/matchups" element={<Matchups />} />
+            <Route path="/league-settings" element={<LeagueSettings />} />
+            <Route path="/my-team" element={<MyTeam />} />
+            <Route path="/players" element={<Players />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/league/:leagueId/roster/:rosterId" element={<TeamRoster />} />
+          </Routes>
+          <PlayerDetailModal />
+        </div>
+      </PlayerModalProvider>
     </AccountProvider>
   )
 }

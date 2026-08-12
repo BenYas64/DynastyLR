@@ -59,8 +59,6 @@ export default function MyTeam() {
         starters={roster.starters}
         allPlayers={roster.players}
         playersMap={players}
-        backTo="/my-team"
-        backLabel="Back to My Team"
         editable
         leagueId={selectedLeagueId}
         userId={user.user_id}

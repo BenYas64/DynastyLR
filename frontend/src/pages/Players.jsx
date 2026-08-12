@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
+import { usePlayerModal } from '../PlayerModalContext.jsx'
 
 const API = 'https://api.dynastylr.site'
 const PAGE_SIZE = 100
@@ -8,7 +8,7 @@ const CURRENT_SEASON = 2026
 const SEASON_OPTIONS = Array.from({ length: CURRENT_SEASON - 2017 + 1 }, (_, i) => CURRENT_SEASON - i)
 
 export default function Players() {
-  const navigate = useNavigate()
+  const { openPlayer } = usePlayerModal()
   const { user, selectedLeagueId } = useAccount()
   const [players, setPlayers] = useState([])
   const [total, setTotal] = useState(0)
@@ -169,7 +169,7 @@ export default function Players() {
           {players.map(p => (
             <tr
               key={p.player_id}
-              onClick={() => navigate(`/players/${p.player_id}`)}
+              onClick={() => openPlayer(p.player_id)}
               style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
             >
               <td style={{ padding: '10px' }}>{p.full_name}</td>
