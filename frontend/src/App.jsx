@@ -4,6 +4,7 @@ import League from './pages/League.jsx'
 import Matchups from './pages/Matchups.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
+import MyMatchup from './pages/MyMatchup.jsx'
 import Players from './pages/Players.jsx'
 import Account from './pages/Account.jsx'
 import TeamRoster from './pages/TeamRoster.jsx'
@@ -39,6 +40,7 @@ function Nav() {
       <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{headerLabel && <span style={{ color: '#ccc' }}>{headerLabel}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
       <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
+      <Link to="/matchup" style={{ color: '#ccc', textDecoration: 'none' }}>My Matchup</Link>
       <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
       <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
       <Link to="/players" style={{ color: '#ccc', textDecoration: 'none' }}>Players</Link>
@@ -57,6 +59,7 @@ function App() {
             <Route path="/" element={<League />} />
             <Route path="/league" element={<League />} />
             <Route path="/matchups" element={<Matchups />} />
+            <Route path="/matchup" element={<MyMatchup />} />
             <Route path="/league-settings" element={<LeagueSettings />} />
             <Route path="/my-team" element={<MyTeam />} />
             <Route path="/players" element={<Players />} />

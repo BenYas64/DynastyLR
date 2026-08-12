@@ -1,5 +1,6 @@
 import json
 import time
+import requests
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -418,6 +419,87 @@ def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
         }
         for m in matchups
     ]
+
+_nfl_state_cache = {"computed_at": 0, "week": None}
+
+def current_nfl_week():
+    """Sleeper's own notion of 'what week is it right now', used to pick the
+    upcoming/live matchup rather than a hardcoded or guessed week number."""
+    now = time.time()
+    if _nfl_state_cache["week"] is not None and now - _nfl_state_cache["computed_at"] < CACHE_TTL_SECONDS:
+        return _nfl_state_cache["week"]
+    week = _nfl_state_cache["week"] or 1
+    try:
+        resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
+        resp.raise_for_status()
+        week = resp.json().get("week") or week
+    except Exception:
+        pass
+    _nfl_state_cache.update({"computed_at": now, "week": week})
+    return week
+
+@app.get("/league/{league_id}/matchup/current")
+def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    my_roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.owner_id == user_id
+    ).first()
+    if not my_roster:
+        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
+
+    week = current_nfl_week()
+
+    my_matchup = db.query(Matchup).filter(
+        Matchup.league_id == league_id, Matchup.week == week, Matchup.roster_id == my_roster.roster_id
+    ).first()
+
+    opp_roster = None
+    if my_matchup and my_matchup.matchup_id is not None:
+        opp_matchup = db.query(Matchup).filter(
+            Matchup.league_id == league_id,
+            Matchup.week == week,
+            Matchup.matchup_id == my_matchup.matchup_id,
+            Matchup.roster_id != my_roster.roster_id,
+        ).first()
+        if opp_matchup:
+            opp_roster = db.query(Roster).filter(
+                Roster.league_id == league_id, Roster.roster_id == opp_matchup.roster_id
+            ).first()
+
+    starter_ids = set()
+    for r in (my_roster, opp_roster):
+        if r and r.starters:
+            starter_ids.update(s for s in r.starters if s and s != '0')
+
+    week_points = {}
+    if starter_ids:
+        rows = (
+            db.query(Stat.player_id, scoring_expression(league))
+            .filter(
+                Stat.season == league.season,
+                Stat.week == week,
+                Stat.season_type == "regular",
+                Stat.player_id.in_(starter_ids),
+            )
+            .all()
+        )
+        week_points = {player_id: pts or 0 for player_id, pts in rows}
+
+    def roster_payload(r):
+        if not r:
+            return None
+        return {"roster_id": r.roster_id, "owner_id": r.owner_id, "starters": r.starters or []}
+
+    return {
+        "week": week,
+        "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
+        "my_roster": roster_payload(my_roster),
+        "opp_roster": roster_payload(opp_roster),
+        "week_points": week_points,
+    }
 
 @app.get("/league/{league_id}/bracket/{bracket_type}")
 def get_bracket(league_id: str, bracket_type: str, db: Session = Depends(get_db)):
