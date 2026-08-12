@@ -246,8 +246,14 @@ export default function RosterSlots({
               {player ? (
                 <span
                   onClick={() => openPlayer(row.playerId)}
-                  style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'none' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit', cursor: 'pointer', textDecoration: 'none' }}
                 >
+                  <img
+                    src={`https://sleepercdn.com/content/nfl/players/thumb/${row.playerId}.jpg`}
+                    alt=""
+                    style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
+                    onError={e => { e.target.style.visibility = 'hidden' }}
+                  />
                   {player.first_name} {player.last_name} - {player.position} - {player.team}
                 </span>
               ) : row.playerId ? (

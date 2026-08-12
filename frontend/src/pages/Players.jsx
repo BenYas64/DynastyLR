@@ -172,7 +172,15 @@ export default function Players() {
               onClick={() => openPlayer(p.player_id)}
               style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
             >
-              <td style={{ padding: '10px' }}>{p.full_name}</td>
+              <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img
+                  src={`https://sleepercdn.com/content/nfl/players/thumb/${p.player_id}.jpg`}
+                  alt=""
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
+                  onError={e => { e.target.style.visibility = 'hidden' }}
+                />
+                {p.full_name}
+              </td>
               <td style={{ padding: '10px' }}>{p.position}</td>
               <td style={{ padding: '10px' }}>{p.team || 'FA'}</td>
               <td style={{ padding: '10px' }}>{p.age}</td>

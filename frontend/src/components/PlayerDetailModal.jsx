@@ -285,7 +285,15 @@ export default function PlayerDetailModal() {
           <p style={{ color: '#ff6b6b' }}>Error: {error}</p>
         ) : (
           <>
-            <h2 style={{ marginTop: 0 }}>{player.full_name}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <img
+                src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
+                alt=""
+                style={{ width: '100px', height: '100px', borderRadius: '12px', objectFit: 'cover', background: '#242444', flexShrink: 0 }}
+                onError={e => { e.target.style.visibility = 'hidden' }}
+              />
+              <h2 style={{ margin: 0 }}>{player.full_name}</h2>
+            </div>
 
             {selectedLeagueId && (
               <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
