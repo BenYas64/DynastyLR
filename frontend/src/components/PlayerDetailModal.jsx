@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, Fragment } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
+import { headshotUrl, onHeadshotError } from '../playerHeadshot.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -287,10 +288,10 @@ export default function PlayerDetailModal() {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <img
-                src={`https://sleepercdn.com/content/nfl/players/thumb/${playerId}.jpg`}
+                src={headshotUrl(playerId)}
                 alt=""
                 style={{ width: '100px', height: '100px', borderRadius: '12px', objectFit: 'cover', background: '#242444', flexShrink: 0 }}
-                onError={e => { e.target.style.visibility = 'hidden' }}
+                onError={onHeadshotError}
               />
               <h2 style={{ margin: 0 }}>{player.full_name}</h2>
             </div>

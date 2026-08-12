@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
+import { headshotUrl, onHeadshotError } from '../playerHeadshot.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -249,10 +250,10 @@ export default function RosterSlots({
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit', cursor: 'pointer', textDecoration: 'none' }}
                 >
                   <img
-                    src={`https://sleepercdn.com/content/nfl/players/thumb/${row.playerId}.jpg`}
+                    src={headshotUrl(row.playerId)}
                     alt=""
                     style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
-                    onError={e => { e.target.style.visibility = 'hidden' }}
+                    onError={onHeadshotError}
                   />
                   {player.first_name} {player.last_name} - {player.position} - {player.team}
                 </span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
+import { headshotUrl, onHeadshotError } from '../playerHeadshot.js'
 
 const API = 'https://api.dynastylr.site'
 const PAGE_SIZE = 100
@@ -174,10 +175,10 @@ export default function Players() {
             >
               <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <img
-                  src={`https://sleepercdn.com/content/nfl/players/thumb/${p.player_id}.jpg`}
+                  src={headshotUrl(p.player_id)}
                   alt=""
                   style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
-                  onError={e => { e.target.style.visibility = 'hidden' }}
+                  onError={onHeadshotError}
                 />
                 {p.full_name}
               </td>
