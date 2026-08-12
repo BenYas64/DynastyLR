@@ -469,20 +469,23 @@ def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_
                 Roster.league_id == league_id, Roster.roster_id == opp_matchup.roster_id
             ).first()
 
-    starter_ids = set()
-    for r in (my_roster, opp_roster):
-        if r and r.starters:
-            starter_ids.update(s for s in r.starters if s and s != '0')
+    # Points are computed for my full roster (so bench players show a score too)
+    # but only the opponent's starters, since that's all that's displayed for them.
+    relevant_ids = set()
+    if my_roster.players:
+        relevant_ids.update(p for p in my_roster.players if p and p != '0')
+    if opp_roster and opp_roster.starters:
+        relevant_ids.update(s for s in opp_roster.starters if s and s != '0')
 
     week_points = {}
-    if starter_ids:
+    if relevant_ids:
         rows = (
             db.query(Stat.player_id, scoring_expression(league))
             .filter(
                 Stat.season == league.season,
                 Stat.week == week,
                 Stat.season_type == "regular",
-                Stat.player_id.in_(starter_ids),
+                Stat.player_id.in_(relevant_ids),
             )
             .all()
         )
@@ -491,7 +494,12 @@ def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_
     def roster_payload(r):
         if not r:
             return None
-        return {"roster_id": r.roster_id, "owner_id": r.owner_id, "starters": r.starters or []}
+        return {
+            "roster_id": r.roster_id,
+            "owner_id": r.owner_id,
+            "starters": r.starters or [],
+            "players": r.players or [],
+        }
 
     return {
         "week": week,
