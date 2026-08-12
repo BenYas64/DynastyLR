@@ -77,6 +77,13 @@ export default function PlayerDetailModal() {
 
   useEffect(() => {
     if (!playerId) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prevOverflow }
+  }, [playerId])
+
+  useEffect(() => {
+    if (!playerId) return
     setLoading(true)
     setError(null)
     setExpandedSeason(null)

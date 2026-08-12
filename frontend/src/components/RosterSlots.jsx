@@ -131,6 +131,13 @@ export default function RosterSlots({
     return () => cancelAnimationFrame(id)
   }, [pickerRow])
 
+  useEffect(() => {
+    if (pickerRow === null) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prevOverflow }
+  }, [pickerRow])
+
   if (!rosterPositions || rosterPositions.length === 0) return null
 
   const rows = buildSlotRows(rosterPositions, starters, allPlayers, playersMap)
@@ -239,7 +246,7 @@ export default function RosterSlots({
               {player ? (
                 <span
                   onClick={() => openPlayer(row.playerId)}
-                  style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'none' }}
                 >
                   {player.first_name} {player.last_name} - {player.position} - {player.team}
                 </span>
