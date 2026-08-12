@@ -60,6 +60,7 @@ function App() {
             <Route path="/league" element={<League />} />
             <Route path="/matchups" element={<Matchups />} />
             <Route path="/matchup" element={<MyMatchup />} />
+            <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
             <Route path="/league-settings" element={<LeagueSettings />} />
             <Route path="/my-team" element={<MyTeam />} />
             <Route path="/players" element={<Players />} />

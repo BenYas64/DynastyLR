@@ -158,21 +158,13 @@ export default function Matchups() {
                 const aWins = b && a.points > b.points
                 const bWins = b && b.points > a.points
                 return (
-                  <div key={i} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '12px' }}>
-                    <MatchupRow
-                      team={teamFor(a.roster_id)}
-                      points={a.points}
-                      winner={aWins}
-                      onClick={() => navigate(`/league/${selectedLeagueId}/roster/${a.roster_id}`)}
-                    />
-                    {b && (
-                      <MatchupRow
-                        team={teamFor(b.roster_id)}
-                        points={b.points}
-                        winner={bWins}
-                        onClick={() => navigate(`/league/${selectedLeagueId}/roster/${b.roster_id}`)}
-                      />
-                    )}
+                  <div
+                    key={i}
+                    onClick={() => navigate(`/league/${selectedLeagueId}/matchup/${week}/${a.roster_id}`)}
+                    style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '12px', cursor: 'pointer' }}
+                  >
+                    <MatchupRow team={teamFor(a.roster_id)} points={a.points} winner={aWins} />
+                    {b && <MatchupRow team={teamFor(b.roster_id)} points={b.points} winner={bWins} />}
                   </div>
                 )
               })}
@@ -250,11 +242,10 @@ function BracketTeamRow({ team, isWinner, onClick }) {
   )
 }
 
-function MatchupRow({ team, points, winner, onClick }) {
+function MatchupRow({ team, points, winner }) {
   return (
     <div
-      onClick={onClick}
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', cursor: 'pointer' }}
+      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: winner ? 'bold' : 'normal' }}>
         {team.avatar && (

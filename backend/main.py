@@ -438,44 +438,36 @@ def current_nfl_week():
     _nfl_state_cache.update({"computed_at": now, "week": week})
     return week
 
-@app.get("/league/{league_id}/matchup/current")
-def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_db)):
-    league = db.query(League).filter(League.league_id == league_id).first()
-    if not league:
-        raise HTTPException(status_code=404, detail="League not found")
-
+def matchup_payload(db, league, week, roster_id):
     my_roster = db.query(Roster).filter(
-        Roster.league_id == league_id, Roster.owner_id == user_id
+        Roster.league_id == league.league_id, Roster.roster_id == roster_id
     ).first()
     if not my_roster:
-        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
-
-    week = current_nfl_week()
+        raise HTTPException(status_code=404, detail="Roster not found")
 
     my_matchup = db.query(Matchup).filter(
-        Matchup.league_id == league_id, Matchup.week == week, Matchup.roster_id == my_roster.roster_id
+        Matchup.league_id == league.league_id, Matchup.week == week, Matchup.roster_id == roster_id
     ).first()
 
     opp_roster = None
     if my_matchup and my_matchup.matchup_id is not None:
         opp_matchup = db.query(Matchup).filter(
-            Matchup.league_id == league_id,
+            Matchup.league_id == league.league_id,
             Matchup.week == week,
             Matchup.matchup_id == my_matchup.matchup_id,
-            Matchup.roster_id != my_roster.roster_id,
+            Matchup.roster_id != roster_id,
         ).first()
         if opp_matchup:
             opp_roster = db.query(Roster).filter(
-                Roster.league_id == league_id, Roster.roster_id == opp_matchup.roster_id
+                Roster.league_id == league.league_id, Roster.roster_id == opp_matchup.roster_id
             ).first()
 
-    # Points are computed for my full roster (so bench players show a score too)
-    # but only the opponent's starters, since that's all that's displayed for them.
+    # Points are computed for both rosters' full player lists, so bench players
+    # (mine and the opponent's) show a score too, not just starters.
     relevant_ids = set()
-    if my_roster.players:
-        relevant_ids.update(p for p in my_roster.players if p and p != '0')
-    if opp_roster and opp_roster.starters:
-        relevant_ids.update(s for s in opp_roster.starters if s and s != '0')
+    for r in (my_roster, opp_roster):
+        if r and r.players:
+            relevant_ids.update(p for p in r.players if p and p != '0')
 
     week_points = {}
     if relevant_ids:
@@ -491,7 +483,7 @@ def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_
         )
         week_points = {player_id: pts or 0 for player_id, pts in rows}
 
-    def roster_payload(r):
+    def roster_json(r):
         if not r:
             return None
         return {
@@ -504,10 +496,32 @@ def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_
     return {
         "week": week,
         "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
-        "my_roster": roster_payload(my_roster),
-        "opp_roster": roster_payload(opp_roster),
+        "my_roster": roster_json(my_roster),
+        "opp_roster": roster_json(opp_roster),
         "week_points": week_points,
     }
+
+@app.get("/league/{league_id}/matchup/current")
+def get_current_matchup(league_id: str, user_id: str, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    my_roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.owner_id == user_id
+    ).first()
+    if not my_roster:
+        raise HTTPException(status_code=404, detail="You don't have a roster in this league")
+
+    return matchup_payload(db, league, current_nfl_week(), my_roster.roster_id)
+
+@app.get("/league/{league_id}/matchup/{week}/{roster_id}")
+def get_matchup_for_roster(league_id: str, week: int, roster_id: int, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    return matchup_payload(db, league, week, roster_id)
 
 @app.get("/league/{league_id}/bracket/{bracket_type}")
 def get_bracket(league_id: str, bracket_type: str, db: Session = Depends(get_db)):

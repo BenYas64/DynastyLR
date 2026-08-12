@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
@@ -104,8 +105,16 @@ function slotChipStyle(slot, overflow, extra) {
 }
 
 export default function MyMatchup() {
+  const { leagueId: urlLeagueId, week: urlWeek, rosterId: urlRosterId } = useParams()
   const { user, selectedLeagueId } = useAccount()
   const { openPlayer } = usePlayerModal()
+
+  // /matchup (no params) shows the signed-in user's current matchup for the
+  // account's selected league. /league/:leagueId/matchup/:week/:rosterId
+  // (reached by clicking a pairing on the Matchups page) shows that specific
+  // matchup instead, for anyone.
+  const leagueId = urlLeagueId || selectedLeagueId
+
   const [data, setData] = useState(null)
   const [users, setUsers] = useState({})
   const [players, setPlayers] = useState({})
@@ -118,15 +127,21 @@ export default function MyMatchup() {
   const [moveError, setMoveError] = useState(null)
 
   const load = () => {
-    if (!user || !selectedLeagueId) return
+    if (!leagueId) return
+    if (!urlRosterId && (!user || !selectedLeagueId)) return
     setLoading(true)
     setError(null)
+
+    const matchupUrl = urlRosterId
+      ? `${API}/league/${leagueId}/matchup/${urlWeek}/${urlRosterId}`
+      : `${API}/league/${leagueId}/matchup/current?user_id=${user.user_id}`
+
     Promise.all([
-      fetch(`${API}/league/${selectedLeagueId}/matchup/current?user_id=${user.user_id}`).then(r => {
+      fetch(matchupUrl).then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to load matchup') })
         return r.json()
       }),
-      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json()),
+      fetch(`${API}/league/${leagueId}/users`).then(r => r.json()),
     ]).then(([matchupData, usersData]) => {
       setData(matchupData)
       const userMap = {}
@@ -135,7 +150,7 @@ export default function MyMatchup() {
 
       const ids = new Set()
       ;(matchupData.my_roster?.players || []).forEach(id => { if (id && id !== '0') ids.add(id) })
-      ;(matchupData.opp_roster?.starters || []).forEach(id => { if (id && id !== '0') ids.add(id) })
+      ;(matchupData.opp_roster?.players || []).forEach(id => { if (id && id !== '0') ids.add(id) })
       if (ids.size === 0) {
         setPlayers({})
         setLoading(false)
@@ -155,7 +170,7 @@ export default function MyMatchup() {
     })
   }
 
-  useEffect(load, [user, selectedLeagueId])
+  useEffect(load, [leagueId, urlWeek, urlRosterId, user, selectedLeagueId])
 
   useEffect(() => {
     if (pickerRow === null) {
@@ -173,26 +188,41 @@ export default function MyMatchup() {
     return () => { document.body.style.overflow = prevOverflow }
   }, [pickerRow])
 
-  if (!user || !selectedLeagueId) return (
+  if (!urlRosterId && (!user || !selectedLeagueId)) return (
     <p style={{ padding: '20px' }}>Sign in and select a league on the Account page to view your matchup.</p>
   )
   if (loading) return <p style={{ padding: '20px' }}>Loading matchup...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
   if (!data || !data.my_roster) return <p style={{ padding: '20px' }}>No matchup found.</p>
 
-  const myUser = users[data.my_roster.owner_id]
-  const oppUser = data.opp_roster ? users[data.opp_roster.owner_id] : null
+  const leftRoster = data.my_roster
+  const rightRoster = data.opp_roster
+  const leftUser = users[leftRoster.owner_id]
+  const rightUser = rightRoster ? users[rightRoster.owner_id] : null
+
+  // Editing only applies to whichever side (if either) belongs to the signed-in
+  // viewer - /set-slot resolves the roster server-side from user_id, so this
+  // just controls whether the slot chips are clickable at all.
+  const editableSide = user && leftRoster.owner_id === user.user_id
+    ? 'left'
+    : user && rightRoster && rightRoster.owner_id === user.user_id
+      ? 'right'
+      : null
 
   const rosterPositions = data.roster_positions || []
   const starterSlots = rosterPositions.filter(p => p !== 'BN')
-  const myStarters = data.my_roster.starters || []
-  const oppStarters = data.opp_roster?.starters || []
 
-  const myRows = buildSlotRows(rosterPositions, myStarters, data.my_roster.players, players)
+  const leftRows = buildSlotRows(rosterPositions, leftRoster.starters, leftRoster.players, players)
+  const rightRows = rightRoster ? buildSlotRows(rosterPositions, rightRoster.starters, rightRoster.players, players) : []
+  const rowCount = Math.max(leftRows.length, rightRows.length)
 
   const pointsFor = (id) => (id && id !== '0' ? (data.week_points[id] ?? 0) : 0)
-  const myTotal = myStarters.reduce((sum, id) => sum + pointsFor(id), 0)
-  const oppTotal = oppStarters.reduce((sum, id) => sum + pointsFor(id), 0)
+  const leftTotal = (leftRoster.starters || []).reduce((sum, id) => sum + pointsFor(id), 0)
+  const rightTotal = (rightRoster?.starters || []).reduce((sum, id) => sum + pointsFor(id), 0)
+
+  const editableRoster = editableSide === 'left' ? leftRoster : editableSide === 'right' ? rightRoster : null
+  const editableRows = editableSide === 'left' ? leftRows : editableSide === 'right' ? rightRows : []
+  const editableStarters = editableRoster?.starters || []
 
   const closePicker = () => {
     setPickerRow(null)
@@ -202,7 +232,7 @@ export default function MyMatchup() {
   const handleMove = (playerId, slotIndex) => {
     setMoving(true)
     setMoveError(null)
-    fetch(`${API}/league/${selectedLeagueId}/set-slot`, {
+    fetch(`${API}/league/${leagueId}/set-slot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: user.user_id, player_id: playerId, slot_index: slotIndex }),
@@ -222,12 +252,12 @@ export default function MyMatchup() {
       })
   }
 
-  const pickerRowData = pickerRow !== null ? myRows[pickerRow] : null
+  const pickerRowData = pickerRow !== null ? editableRows[pickerRow] : null
   const pickerPlayer = pickerRowData?.playerId ? players[pickerRowData.playerId] : null
   const fillMode = pickerRowData ? !pickerRowData.playerId : false
 
   const currentSlotLabel = (playerId) => {
-    const idx = myStarters.indexOf(playerId)
+    const idx = editableStarters.indexOf(playerId)
     if (idx === -1 || idx >= starterSlots.length) return 'Bench'
     return SLOT_LABELS[starterSlots[idx]] || starterSlots[idx]
   }
@@ -237,7 +267,7 @@ export default function MyMatchup() {
     starterSlots.forEach((slotType, i) => {
       if (i === pickerRow) return
       if (!eligibleForSlot(pickerPlayer, slotType)) return
-      const occupantId = myRows[i]?.playerId
+      const occupantId = editableRows[i]?.playerId
       options.push({ slotIndex: i, slotType, occupant: occupantId ? players[occupantId] : null })
     })
     if (pickerRowData.section !== 'bench') {
@@ -248,7 +278,7 @@ export default function MyMatchup() {
   const fillCandidates = []
   if (pickerRowData && fillMode) {
     const slotType = pickerRowData.slot
-    ;(data.my_roster.players || []).forEach(id => {
+    ;(editableRoster?.players || []).forEach(id => {
       const p = players[id]
       if (!p || !eligibleForSlot(p, slotType)) return
       fillCandidates.push({ playerId: id, player: p, currentLabel: currentSlotLabel(id) })
@@ -260,24 +290,24 @@ export default function MyMatchup() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h2>My Matchup &ndash; Week {data.week}</h2>
+      <h2>Matchup &ndash; Week {data.week}</h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px', textAlign: 'center' }}>
         <div>
-          {teamAvatarUrl(myUser) && (
-            <img src={teamAvatarUrl(myUser)} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+          {teamAvatarUrl(leftUser) && (
+            <img src={teamAvatarUrl(leftUser)} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
           )}
-          <div style={{ fontWeight: 'bold', marginTop: '4px' }}>{teamName(myUser)}</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{myTotal.toFixed(2)}</div>
+          <div style={{ fontWeight: 'bold', marginTop: '4px' }}>{teamName(leftUser)}</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{leftTotal.toFixed(2)}</div>
         </div>
         <div>
-          {data.opp_roster ? (
+          {rightRoster ? (
             <>
-              {teamAvatarUrl(oppUser) && (
-                <img src={teamAvatarUrl(oppUser)} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+              {teamAvatarUrl(rightUser) && (
+                <img src={teamAvatarUrl(rightUser)} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
               )}
-              <div style={{ fontWeight: 'bold', marginTop: '4px' }}>{teamName(oppUser)}</div>
-              <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{oppTotal.toFixed(2)}</div>
+              <div style={{ fontWeight: 'bold', marginTop: '4px' }}>{teamName(rightUser)}</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{rightTotal.toFixed(2)}</div>
             </>
           ) : (
             <div style={{ color: '#666', marginTop: '18px' }}>Bye Week</div>
@@ -286,17 +316,25 @@ export default function MyMatchup() {
       </div>
 
       <div>
-        {myRows.map((row, i) => {
-          const myPlayer = row.playerId ? players[row.playerId] : null
-          const oppId = row.section === 'starter' ? oppStarters[i] : null
-          const oppPlayer = oppId && oppId !== '0' ? players[oppId] : null
-          const showHeader = i === 0 || myRows[i - 1].section !== row.section
+        {Array.from({ length: rowCount }).map((_, i) => {
+          const leftRow = leftRows[i] || null
+          const rightRow = rightRows[i] || null
+          const section = leftRow?.section || rightRow?.section || 'bench'
+          const slot = leftRow?.slot || rightRow?.slot || 'BN'
+          const overflow = leftRow?.overflow || rightRow?.overflow || false
+          const leftPlayer = leftRow?.playerId ? players[leftRow.playerId] : null
+          const rightPlayer = rightRow?.playerId ? players[rightRow.playerId] : null
+          const prevSection = i === 0 ? null : (leftRows[i - 1]?.section || rightRows[i - 1]?.section)
+          const showHeader = i === 0 || prevSection !== section
+
+          const chipEditable = (editableSide === 'left' && leftRow) || (editableSide === 'right' && rightRow)
+          const chipRowIndex = editableSide === 'left' ? i : editableSide === 'right' ? i : null
 
           return (
             <div key={i}>
               {showHeader && (
                 <h3 style={{ margin: i === 0 ? '0 0 8px' : '20px 0 8px', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#666' }}>
-                  {row.section === 'starter' ? 'Starters' : 'Bench'}
+                  {section === 'starter' ? 'Starters' : 'Bench'}
                 </h3>
               )}
               <div
@@ -310,53 +348,49 @@ export default function MyMatchup() {
                 }}
               >
                 <div
-                  onClick={() => myPlayer && openPlayer(row.playerId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', textAlign: 'right', cursor: myPlayer ? 'pointer' : 'default' }}
+                  onClick={() => leftPlayer && openPlayer(leftRow.playerId)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', textAlign: 'right', cursor: leftPlayer ? 'pointer' : 'default' }}
                 >
-                  {myPlayer && (
+                  {leftPlayer && (
                     <img
-                      src={headshotUrl(row.playerId)}
+                      src={headshotUrl(leftRow.playerId)}
                       onError={onHeadshotError}
                       alt=""
                       style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                     />
                   )}
-                  <span>{myPlayer ? `${myPlayer.first_name} ${myPlayer.last_name} - ${myPlayer.team || 'FA'}` : 'Empty'}</span>
+                  <span>{leftRow ? (leftPlayer ? `${leftPlayer.first_name} ${leftPlayer.last_name} - ${leftPlayer.team || 'FA'}` : 'Empty') : ''}</span>
                 </div>
 
                 <div style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                  {myPlayer ? pointsFor(row.playerId).toFixed(2) : '-'}
+                  {leftPlayer ? pointsFor(leftRow.playerId).toFixed(2) : (leftRow ? '-' : '')}
                 </div>
 
                 <div style={{ textAlign: 'center' }}>
                   <span
-                    onClick={() => setPickerRow(i)}
-                    style={slotChipStyle(row.slot, row.overflow, { cursor: 'pointer' })}
+                    onClick={chipEditable ? () => setPickerRow(chipRowIndex) : undefined}
+                    style={slotChipStyle(slot, overflow, { cursor: chipEditable ? 'pointer' : 'default' })}
                   >
-                    {SLOT_LABELS[row.slot] || row.slot}
+                    {SLOT_LABELS[slot] || slot}
                   </span>
                 </div>
 
                 <div style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                  {row.section === 'starter' && oppPlayer ? pointsFor(oppId).toFixed(2) : (row.section === 'starter' && data.opp_roster ? '-' : '')}
+                  {rightPlayer ? pointsFor(rightRow.playerId).toFixed(2) : (rightRow ? '-' : '')}
                 </div>
 
                 <div
-                  onClick={() => oppPlayer && openPlayer(oppId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: oppPlayer ? 'pointer' : 'default' }}
+                  onClick={() => rightPlayer && openPlayer(rightRow.playerId)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: rightPlayer ? 'pointer' : 'default' }}
                 >
-                  {row.section === 'starter' && (
-                    <>
-                      <span>{oppPlayer ? `${oppPlayer.first_name} ${oppPlayer.last_name} - ${oppPlayer.team || 'FA'}` : (data.opp_roster ? 'Empty' : '')}</span>
-                      {oppPlayer && (
-                        <img
-                          src={headshotUrl(oppId)}
-                          onError={onHeadshotError}
-                          alt=""
-                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                        />
-                      )}
-                    </>
+                  <span>{rightRow ? (rightPlayer ? `${rightPlayer.first_name} ${rightPlayer.last_name} - ${rightPlayer.team || 'FA'}` : 'Empty') : ''}</span>
+                  {rightPlayer && (
+                    <img
+                      src={headshotUrl(rightRow.playerId)}
+                      onError={onHeadshotError}
+                      alt=""
+                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                    />
                   )}
                 </div>
               </div>
