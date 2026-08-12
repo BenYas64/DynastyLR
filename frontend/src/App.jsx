@@ -35,7 +35,7 @@ function Nav() {
     : null
 
   return (
-    <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', gap: '20px', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
+    <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', flexWrap: 'wrap', gap: '12px 20px', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
       <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{headerLabel && <span style={{ color: '#ccc' }}>{headerLabel}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
       <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
