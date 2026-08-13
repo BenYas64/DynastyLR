@@ -357,6 +357,10 @@ def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
 
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    if is_superseded or league.status == "complete":
+        raise HTTPException(status_code=403, detail="This season has ended - lineups can't be edited")
+
     roster = db.query(Roster).filter(
         Roster.league_id == league_id, Roster.owner_id == payload.user_id
     ).first()
@@ -493,12 +497,20 @@ def matchup_payload(db, league, week, roster_id):
             "players": r.players or [],
         }
 
+    # Lineups can only be edited for the live matchup in the league's current
+    # season - not a past/completed season, and not a week that's already
+    # been played. A league can be "complete" before next season's version
+    # even exists yet, so both signals matter, not just supersession.
+    is_superseded = db.query(League).filter(League.previous_league_id == league.league_id).first() is not None
+    editable = (not is_superseded) and league.status != "complete" and week >= current_nfl_week()
+
     return {
         "week": week,
         "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
         "my_roster": roster_json(my_roster),
         "opp_roster": roster_json(opp_roster),
         "week_points": week_points,
+        "editable": editable,
     }
 
 @app.get("/league/{league_id}/matchup/current")

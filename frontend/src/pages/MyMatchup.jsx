@@ -202,12 +202,16 @@ export default function MyMatchup() {
 
   // Editing only applies to whichever side (if either) belongs to the signed-in
   // viewer - /set-slot resolves the roster server-side from user_id, so this
-  // just controls whether the slot chips are clickable at all.
-  const editableSide = user && leftRoster.owner_id === user.user_id
-    ? 'left'
-    : user && rightRoster && rightRoster.owner_id === user.user_id
-      ? 'right'
-      : null
+  // just controls whether the slot chips are clickable at all. The backend
+  // also refuses to lock in a past season or an already-played week, so mirror
+  // that here too rather than showing chips that would just error on click.
+  const editableSide = !data.editable
+    ? null
+    : user && leftRoster.owner_id === user.user_id
+      ? 'left'
+      : user && rightRoster && rightRoster.owner_id === user.user_id
+        ? 'right'
+        : null
 
   const rosterPositions = data.roster_positions || []
   const starterSlots = rosterPositions.filter(p => p !== 'BN')
