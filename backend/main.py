@@ -454,6 +454,7 @@ def matchup_payload(db, league, week, roster_id):
     ).first()
 
     opp_roster = None
+    opp_matchup = None
     if my_matchup and my_matchup.matchup_id is not None:
         opp_matchup = db.query(Matchup).filter(
             Matchup.league_id == league.league_id,
@@ -466,12 +467,40 @@ def matchup_payload(db, league, week, roster_id):
                 Roster.league_id == league.league_id, Roster.roster_id == opp_matchup.roster_id
             ).first()
 
-    # Points are computed for both rosters' full player lists, so bench players
+    # Lineups can only be edited for the live matchup in the league's current
+    # season - not a past/completed season, and not a week that's already
+    # been played. A league can be "complete" before next season's version
+    # even exists yet, so both signals matter, not just supersession.
+    is_superseded = db.query(League).filter(League.previous_league_id == league.league_id).first() is not None
+    editable = (not is_superseded) and league.status != "complete" and week >= current_nfl_week()
+
+    def roster_json(r, m):
+        if not r:
+            return None
+        # For a locked (already-played) week, use that week's actual snapshot
+        # from the Matchup row instead of the live roster - otherwise every
+        # past week would show today's current lineup, which is wrong.
+        starters = players = None
+        if not editable and m:
+            starters = json.loads(m.starters) if m.starters else None
+            players = json.loads(m.players) if m.players else None
+        return {
+            "roster_id": r.roster_id,
+            "owner_id": r.owner_id,
+            "starters": starters if starters else (r.starters or []),
+            "players": players if players else (r.players or []),
+        }
+
+    my_json = roster_json(my_roster, my_matchup)
+    opp_json = roster_json(opp_roster, opp_matchup)
+
+    # Points are computed for both rosters' full player lists (whichever
+    # snapshot - historical or live - was picked above), so bench players
     # (mine and the opponent's) show a score too, not just starters.
     relevant_ids = set()
-    for r in (my_roster, opp_roster):
-        if r and r.players:
-            relevant_ids.update(p for p in r.players if p and p != '0')
+    for rj in (my_json, opp_json):
+        if rj:
+            relevant_ids.update(p for p in rj["players"] if p and p != '0')
 
     week_points = {}
     if relevant_ids:
@@ -487,28 +516,11 @@ def matchup_payload(db, league, week, roster_id):
         )
         week_points = {player_id: pts or 0 for player_id, pts in rows}
 
-    def roster_json(r):
-        if not r:
-            return None
-        return {
-            "roster_id": r.roster_id,
-            "owner_id": r.owner_id,
-            "starters": r.starters or [],
-            "players": r.players or [],
-        }
-
-    # Lineups can only be edited for the live matchup in the league's current
-    # season - not a past/completed season, and not a week that's already
-    # been played. A league can be "complete" before next season's version
-    # even exists yet, so both signals matter, not just supersession.
-    is_superseded = db.query(League).filter(League.previous_league_id == league.league_id).first() is not None
-    editable = (not is_superseded) and league.status != "complete" and week >= current_nfl_week()
-
     return {
         "week": week,
         "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
-        "my_roster": roster_json(my_roster),
-        "opp_roster": roster_json(opp_roster),
+        "my_roster": my_json,
+        "opp_roster": opp_json,
         "week_points": week_points,
         "editable": editable,
     }

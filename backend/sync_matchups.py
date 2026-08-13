@@ -32,6 +32,7 @@ def sync_matchups():
                         "matchup_id": m.get("matchup_id"),
                         "points": m.get("points"),
                         "players": json.dumps(m.get("players")),
+                        "starters": json.dumps(m.get("starters")),
                     }
                     for m in data
                     if m.get("roster_id") is not None
@@ -46,6 +47,7 @@ def sync_matchups():
                         "matchup_id": stmt.excluded.matchup_id,
                         "points": stmt.excluded.points,
                         "players": stmt.excluded.players,
+                        "starters": stmt.excluded.starters,
                     },
                 )
                 db.execute(stmt)

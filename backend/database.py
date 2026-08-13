@@ -378,6 +378,7 @@ class Matchup(Base):
     matchup_id = Column(Integer)
     points = Column(Float)
     players = Column(Text)
+    starters = Column(Text)
 
 class BracketMatchup(Base):
     __tablename__ = "bracket_matchups"
