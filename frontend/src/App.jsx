@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import League from './pages/League.jsx'
-import Matchups from './pages/Matchups.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import MyMatchup from './pages/MyMatchup.jsx'
@@ -39,7 +38,6 @@ function Nav() {
     <nav style={{ background: '#1a1a2e', padding: '15px', display: 'flex', flexWrap: 'wrap', gap: '12px 20px', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
       <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>{headerLabel && <span style={{ color: '#ccc' }}>{headerLabel}</span>}</Link>
       <Link to="/league" style={{ color: '#ccc', textDecoration: 'none' }}>League</Link>
-      <Link to="/matchups" style={{ color: '#ccc', textDecoration: 'none' }}>Matchups</Link>
       <Link to="/matchup" style={{ color: '#ccc', textDecoration: 'none' }}>My Matchup</Link>
       <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
       <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
@@ -58,7 +56,6 @@ function App() {
           <Routes>
             <Route path="/" element={<League />} />
             <Route path="/league" element={<League />} />
-            <Route path="/matchups" element={<Matchups />} />
             <Route path="/matchup" element={<MyMatchup />} />
             <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
             <Route path="/league-settings" element={<LeagueSettings />} />

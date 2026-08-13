@@ -111,7 +111,7 @@ export default function MyMatchup() {
 
   // /matchup (no params) shows the signed-in user's current matchup for the
   // account's selected league. /league/:leagueId/matchup/:week/:rosterId
-  // (reached by clicking a pairing on the Matchups page) shows that specific
+  // (reached by clicking a pairing on the League page) shows that specific
   // matchup instead, for anyone.
   const leagueId = urlLeagueId || selectedLeagueId
 
