@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import League from './pages/League.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
+import ScoringSettings from './pages/ScoringSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import MyMatchup from './pages/MyMatchup.jsx'
 import Players from './pages/Players.jsx'
@@ -59,6 +60,7 @@ function App() {
             <Route path="/matchup" element={<MyMatchup />} />
             <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
             <Route path="/league-settings" element={<LeagueSettings />} />
+            <Route path="/league-settings/scoring" element={<ScoringSettings />} />
             <Route path="/my-team" element={<MyTeam />} />
             <Route path="/players" element={<Players />} />
             <Route path="/account" element={<Account />} />
