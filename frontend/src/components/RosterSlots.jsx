@@ -333,6 +333,12 @@ export default function RosterSlots({
                     <span style={slotChipStyle(c.currentLabel === 'Bench' ? 'BN' : c.player.position, false)}>
                       {c.currentLabel}
                     </span>
+                    <img
+                      src={headshotUrl(c.playerId)}
+                      alt=""
+                      style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', background: '#33334d', flexShrink: 0, marginRight: '10px' }}
+                      onError={onHeadshotError}
+                    />
                     <span>
                       {c.player.first_name} {c.player.last_name} - {c.player.position} - {c.player.team}
                     </span>
@@ -363,6 +369,14 @@ export default function RosterSlots({
                   <span style={slotChipStyle(opt.slotType, false)}>
                     {SLOT_LABELS[opt.slotType] || opt.slotType}
                   </span>
+                  {opt.occupant && (
+                    <img
+                      src={headshotUrl(opt.occupant.player_id)}
+                      alt=""
+                      style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', background: '#33334d', flexShrink: 0, marginRight: '10px' }}
+                      onError={onHeadshotError}
+                    />
+                  )}
                   <span>
                     {opt.slotType === 'BN'
                       ? 'Move to bench'
