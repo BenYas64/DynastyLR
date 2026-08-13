@@ -239,7 +239,7 @@ export default function MyMatchup() {
     fetch(`${API}/league/${leagueId}/set-slot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: user.user_id, player_id: playerId, slot_index: slotIndex }),
+      body: JSON.stringify({ user_id: user.user_id, week: data.week, player_id: playerId, slot_index: slotIndex }),
     })
       .then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to move player') })

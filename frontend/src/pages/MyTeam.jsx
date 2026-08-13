@@ -109,6 +109,7 @@ export default function MyTeam() {
           editable={weekData.editable}
           leagueId={selectedLeagueId}
           userId={user.user_id}
+          week={week}
           onMoved={load}
         />
       )}

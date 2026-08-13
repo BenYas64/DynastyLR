@@ -132,6 +132,7 @@ export default function TeamRoster() {
           editable={isOwner && weekData.editable}
           leagueId={leagueId}
           userId={user?.user_id}
+          week={week}
           onMoved={load}
         />
       )}

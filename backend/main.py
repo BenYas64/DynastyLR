@@ -348,6 +348,7 @@ def add_player(league_id: str, payload: RosterMove, db: Session = Depends(get_db
 
 class SlotMove(BaseModel):
     user_id: str
+    week: int
     player_id: str
     slot_index: int | None = None  # index into starter slots (roster_positions minus BN); None = bench
 
@@ -357,9 +358,8 @@ def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
 
-    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
-    if is_superseded or league.status == "complete":
-        raise HTTPException(status_code=403, detail="This season has ended - lineups can't be edited")
+    if not week_editable(db, league, payload.week):
+        raise HTTPException(status_code=403, detail="This week's lineup can't be edited")
 
     roster = db.query(Roster).filter(
         Roster.league_id == league_id, Roster.owner_id == payload.user_id
@@ -369,8 +369,16 @@ def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
     if payload.player_id not in (roster.players or []):
         raise HTTPException(status_code=400, detail="Player is not on your roster")
 
+    # Lineups are set independently per week (exactly like Sleeper - setting
+    # week 7's lineup during week 1 doesn't touch week 1's), so the starting
+    # point is that week's own row, not the live roster, if one exists yet.
+    matchup = db.query(Matchup).filter(
+        Matchup.league_id == league_id, Matchup.week == payload.week, Matchup.roster_id == roster.roster_id
+    ).first()
+    base_starters = json.loads(matchup.starters) if matchup and matchup.starters else None
+
     starter_slots = [p for p in json.loads(league.roster_positions or "[]") if p != "BN"]
-    starters = list(roster.starters or [])
+    starters = list(base_starters) if base_starters else list(roster.starters or [])
     starters += ["0"] * (len(starter_slots) - len(starters))
 
     if payload.slot_index is not None:
@@ -406,10 +414,25 @@ def set_slot(league_id: str, payload: SlotMove, db: Session = Depends(get_db)):
                 displaced_eligible = any(p in source_eligible for p in displaced_positions)
             starters[source_index] = displaced if displaced_eligible else "0"
 
-    roster.starters = starters
+    if matchup:
+        matchup.starters = json.dumps(starters)
+    else:
+        matchup = Matchup(
+            league_id=league_id,
+            week=payload.week,
+            roster_id=roster.roster_id,
+            starters=json.dumps(starters),
+        )
+        db.add(matchup)
+
+    # Keep the live roster mirror in sync for the current week only, since
+    # other things (e.g. Sleeper-facing displays) still read it as "now".
+    if payload.week == current_nfl_week():
+        roster.starters = starters
+
     db.commit()
 
-    return {"players": roster.players, "starters": roster.starters}
+    return {"week": payload.week, "players": roster.players, "starters": starters}
 
 @app.get("/league/{league_id}/matchups/{week}")
 def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
@@ -453,17 +476,25 @@ def week_editable(db, league, week):
 def roster_week_snapshot(db, league, roster, week, editable):
     if not roster:
         return None
-    # For a locked (already-played) week, use that week's actual snapshot from
-    # the Matchup row instead of the live roster - otherwise every past week
-    # would show today's current lineup, which is wrong.
-    starters = players = None
-    if not editable:
-        m = db.query(Matchup).filter(
-            Matchup.league_id == league.league_id, Matchup.week == week, Matchup.roster_id == roster.roster_id
-        ).first()
-        if m:
-            starters = json.loads(m.starters) if m.starters else None
-            players = json.loads(m.players) if m.players else None
+    m = db.query(Matchup).filter(
+        Matchup.league_id == league.league_id, Matchup.week == week, Matchup.roster_id == roster.roster_id
+    ).first()
+
+    # Starters are set per-week independently, like Sleeper's own lineup
+    # planning - a locally-set week 7 lineup sticks even while week 1 is
+    # still current, so this applies whether or not the week is locked.
+    week_starters = json.loads(m.starters) if m and m.starters else None
+    starters = week_starters if week_starters else (roster.starters or [])
+
+    # The player pool to pick starters from is always the live roster while
+    # editable (you can only start players you currently own), but a locked
+    # past week should show that week's actual historical roster instead.
+    if editable:
+        players = roster.players or []
+    else:
+        week_players = json.loads(m.players) if m and m.players else None
+        players = week_players if week_players else (roster.players or [])
+
     return {
         "roster_id": roster.roster_id,
         "owner_id": roster.owner_id,

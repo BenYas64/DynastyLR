@@ -115,7 +115,7 @@ function slotChipStyle(slot, overflow, extra) {
 
 export default function RosterSlots({
   rosterPositions, starters, allPlayers, playersMap,
-  editable, leagueId, userId, onMoved,
+  editable, leagueId, userId, week, onMoved,
 }) {
   const { openPlayer } = usePlayerModal()
   const [pickerRow, setPickerRow] = useState(null)
@@ -155,7 +155,7 @@ export default function RosterSlots({
     fetch(`${API}/league/${leagueId}/set-slot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, player_id: playerId, slot_index: slotIndex }),
+      body: JSON.stringify({ user_id: userId, week, player_id: playerId, slot_index: slotIndex }),
     })
       .then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to move player') })
