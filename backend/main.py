@@ -442,6 +442,35 @@ def current_nfl_week():
     _nfl_state_cache.update({"computed_at": now, "week": week})
     return week
 
+def week_editable(db, league, week):
+    """Lineups can only be edited for the live matchup in the league's current
+    season - not a past/completed season, and not a week that's already been
+    played. A league can be "complete" before next season's version even
+    exists yet, so both signals matter, not just supersession."""
+    is_superseded = db.query(League).filter(League.previous_league_id == league.league_id).first() is not None
+    return (not is_superseded) and league.status != "complete" and week >= current_nfl_week()
+
+def roster_week_snapshot(db, league, roster, week, editable):
+    if not roster:
+        return None
+    # For a locked (already-played) week, use that week's actual snapshot from
+    # the Matchup row instead of the live roster - otherwise every past week
+    # would show today's current lineup, which is wrong.
+    starters = players = None
+    if not editable:
+        m = db.query(Matchup).filter(
+            Matchup.league_id == league.league_id, Matchup.week == week, Matchup.roster_id == roster.roster_id
+        ).first()
+        if m:
+            starters = json.loads(m.starters) if m.starters else None
+            players = json.loads(m.players) if m.players else None
+    return {
+        "roster_id": roster.roster_id,
+        "owner_id": roster.owner_id,
+        "starters": starters if starters else (roster.starters or []),
+        "players": players if players else (roster.players or []),
+    }
+
 def matchup_payload(db, league, week, roster_id):
     my_roster = db.query(Roster).filter(
         Roster.league_id == league.league_id, Roster.roster_id == roster_id
@@ -454,7 +483,6 @@ def matchup_payload(db, league, week, roster_id):
     ).first()
 
     opp_roster = None
-    opp_matchup = None
     if my_matchup and my_matchup.matchup_id is not None:
         opp_matchup = db.query(Matchup).filter(
             Matchup.league_id == league.league_id,
@@ -467,32 +495,9 @@ def matchup_payload(db, league, week, roster_id):
                 Roster.league_id == league.league_id, Roster.roster_id == opp_matchup.roster_id
             ).first()
 
-    # Lineups can only be edited for the live matchup in the league's current
-    # season - not a past/completed season, and not a week that's already
-    # been played. A league can be "complete" before next season's version
-    # even exists yet, so both signals matter, not just supersession.
-    is_superseded = db.query(League).filter(League.previous_league_id == league.league_id).first() is not None
-    editable = (not is_superseded) and league.status != "complete" and week >= current_nfl_week()
-
-    def roster_json(r, m):
-        if not r:
-            return None
-        # For a locked (already-played) week, use that week's actual snapshot
-        # from the Matchup row instead of the live roster - otherwise every
-        # past week would show today's current lineup, which is wrong.
-        starters = players = None
-        if not editable and m:
-            starters = json.loads(m.starters) if m.starters else None
-            players = json.loads(m.players) if m.players else None
-        return {
-            "roster_id": r.roster_id,
-            "owner_id": r.owner_id,
-            "starters": starters if starters else (r.starters or []),
-            "players": players if players else (r.players or []),
-        }
-
-    my_json = roster_json(my_roster, my_matchup)
-    opp_json = roster_json(opp_roster, opp_matchup)
+    editable = week_editable(db, league, week)
+    my_json = roster_week_snapshot(db, league, my_roster, week, editable)
+    opp_json = roster_week_snapshot(db, league, opp_roster, week, editable)
 
     # Points are computed for both rosters' full player lists (whichever
     # snapshot - historical or live - was picked above), so bench players
@@ -546,6 +551,31 @@ def get_matchup_for_roster(league_id: str, week: int, roster_id: int, db: Sessio
         raise HTTPException(status_code=404, detail="League not found")
 
     return matchup_payload(db, league, week, roster_id)
+
+@app.get("/current-week")
+def get_current_week():
+    return {"week": current_nfl_week()}
+
+@app.get("/league/{league_id}/roster/{roster_id}/week/{week}")
+def get_roster_week(league_id: str, roster_id: int, week: int, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id, Roster.roster_id == roster_id
+    ).first()
+    if not roster:
+        raise HTTPException(status_code=404, detail="Roster not found")
+
+    editable = week_editable(db, league, week)
+    snapshot = roster_week_snapshot(db, league, roster, week, editable)
+
+    return {
+        "week": week,
+        "editable": editable,
+        "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
+        **snapshot,
+    }
 
 @app.get("/league/{league_id}/bracket/{bracket_type}")
 def get_bracket(league_id: str, bracket_type: str, db: Session = Depends(get_db)):
