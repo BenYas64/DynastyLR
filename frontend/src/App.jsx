@@ -3,6 +3,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import League from './pages/League.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import ScoringSettings from './pages/ScoringSettings.jsx'
+import RosterSettings from './pages/RosterSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import MyMatchup from './pages/MyMatchup.jsx'
 import Players from './pages/Players.jsx'
@@ -61,6 +62,7 @@ function App() {
             <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
             <Route path="/league-settings" element={<LeagueSettings />} />
             <Route path="/league-settings/scoring" element={<ScoringSettings />} />
+            <Route path="/league-settings/roster" element={<RosterSettings />} />
             <Route path="/my-team" element={<MyTeam />} />
             <Route path="/players" element={<Players />} />
             <Route path="/account" element={<Account />} />
