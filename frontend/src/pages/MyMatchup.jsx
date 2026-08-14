@@ -4,21 +4,9 @@ import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 import { headshotUrl, onHeadshotError } from '../playerHeadshot.js'
+import { SLOT_LABELS, slotBackground } from '../positionColors.js'
 
 const API = 'https://api.dynastylr.site'
-
-const SLOT_COLORS = {
-  QB: '#d32f2f',
-  RB: '#2e7d32',
-  WR: '#1976d2',
-  TE: '#d26019',
-  FLEX: '#7b1fa2',
-  SUPER_FLEX: '#d32f2f',
-}
-
-const SLOT_LABELS = {
-  SUPER_FLEX: 'SFLX',
-}
 
 // Mirrors RosterSlots.jsx's slot-building/eligibility logic exactly, so bench
 // ordering and move rules behave identically to the roster page.
@@ -99,7 +87,7 @@ function slotChipStyle(slot, overflow, extra) {
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#fff',
-    background: overflow ? '#d32f2f' : SLOT_COLORS[slot] || '#666',
+    background: overflow ? '#d32f2f' : slotBackground(slot) || '#666',
     ...extra,
   }
 }

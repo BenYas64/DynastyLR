@@ -1,39 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
+import { SLOT_LABELS, slotBackground } from '../positionColors.js'
 
 const API = 'https://api.dynastylr.site'
 
 // Display order requested, mapped to Sleeper's actual roster_positions slot
 // type strings (mirrors FLEX_ELIGIBLE_POSITIONS used elsewhere for slot logic).
-// Colors follow the same palette as the position chips on the roster/matchup
-// pages where they overlap (QB/RB/WR/TE/FLEX/SUPER_FLEX).
-const QB_COLOR = '#d32f2f'
-const RB_COLOR = '#2e7d32'
-const WR_COLOR = '#1976d2'
-const TE_COLOR = '#d26019'
-
-// Flex-type slots already blend 2-4 real positions, so their chips use a
-// gradient of those positions' own colors instead of a single flat color -
-// everything else (a single true position) stays a flat color.
+// Colors/abbreviations come from the shared positionColors module, so this
+// page always matches the roster/matchup pages' chips.
 const SLOT_ORDER = [
-  ['QB', 'QB', 'Quarterback', QB_COLOR],
-  ['RB', 'RB', 'Running Back', RB_COLOR],
-  ['WR', 'WR', 'Wide Receiver', WR_COLOR],
-  ['TE', 'TE', 'Tight End', TE_COLOR],
-  ['FLEX', 'FLX', 'Flex (RB/WR/TE)', [RB_COLOR, WR_COLOR, TE_COLOR]],
-  ['WRRB_FLEX', 'FLX', 'Flex (RB/WR)', [RB_COLOR, WR_COLOR]],
-  ['REC_FLEX', 'FLX', 'Flex (WR/TE)', [WR_COLOR, TE_COLOR]],
-  ['SUPER_FLEX', 'SFX', 'Super Flex (QB/RB/WR/TE)', [QB_COLOR, RB_COLOR, WR_COLOR, TE_COLOR]],
-  ['K', 'K', 'Kicker', '#ec4899'],
-  ['DEF', 'DEF', 'Defense', '#795548'],
-  ['BN', 'BN', 'Bench', '#9e9e9e'],
-  ['DL', 'DL', 'Defensive Linemen', '#f57c00'],
-  ['LB', 'LB', 'Linebacker', '#fbc02d'],
-  ['DB', 'DB', 'Defensive Back', '#43a047'],
-  ['IDP_FLEX', 'IDP', 'IDP Flex', ['#f57c00', '#fbc02d', '#43a047']],
+  ['QB', 'Quarterback'],
+  ['RB', 'Running Back'],
+  ['WR', 'Wide Receiver'],
+  ['TE', 'Tight End'],
+  ['FLEX', 'Flex (RB/WR/TE)'],
+  ['WRRB_FLEX', 'Flex (RB/WR)'],
+  ['REC_FLEX', 'Flex (WR/TE)'],
+  ['SUPER_FLEX', 'Super Flex (QB/RB/WR/TE)'],
+  ['K', 'Kicker'],
+  ['DEF', 'Defense'],
+  ['BN', 'Bench'],
+  ['DL', 'Defensive Linemen'],
+  ['LB', 'Linebacker'],
+  ['DB', 'Defensive Back'],
+  ['IDP_FLEX', 'IDP Flex'],
 ]
 
-function chipStyle(color) {
+function chipStyle(slot) {
   return {
     display: 'inline-block',
     minWidth: '44px',
@@ -44,7 +37,7 @@ function chipStyle(color) {
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#fff',
-    background: Array.isArray(color) ? `linear-gradient(135deg, ${color.join(', ')})` : color,
+    background: slotBackground(slot) || '#9e9e9e',
   }
 }
 
@@ -135,7 +128,7 @@ export default function RosterSettings() {
   const counts = {}
   rosterPositions.forEach(slot => { counts[slot] = (counts[slot] || 0) + 1 })
 
-  const entries = SLOT_ORDER.filter(([, , fullName]) => fullName.toLowerCase().includes(search.toLowerCase()))
+  const entries = SLOT_ORDER.filter(([, fullName]) => fullName.toLowerCase().includes(search.toLowerCase()))
 
   const handleSave = () => {
     setSaving(true)
@@ -200,10 +193,10 @@ export default function RosterSettings() {
           </tr>
         </thead>
         <tbody>
-          {entries.map(([slot, abbr, fullName, color]) => (
+          {entries.map(([slot, fullName]) => (
             <tr key={slot} style={{ borderBottom: '1px solid #eee' }}>
               <td style={{ padding: '8px' }}>
-                <span style={chipStyle(color)}>{abbr}</span>
+                <span style={chipStyle(slot)}>{SLOT_LABELS[slot] || slot}</span>
                 {fullName}
               </td>
               <td style={{ padding: '8px', textAlign: 'right' }}>

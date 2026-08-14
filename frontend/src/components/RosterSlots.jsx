@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { headshotUrl, onHeadshotError } from '../playerHeadshot.js'
+import { SLOT_LABELS, slotBackground } from '../positionColors.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -84,20 +85,8 @@ const SECTION_LABELS = {
   bench: 'Bench',
 }
 
-const SLOT_COLORS = {
-  QB: '#d32f2f',
-  RB: '#2e7d32',
-  WR: '#1976d2',
-  TE: '#d26019',
-  FLEX: '#7b1fa2',
-  SUPER_FLEX: '#d32f2f',
-}
-
-const SLOT_LABELS = {
-  SUPER_FLEX: 'SFLX',
-}
-
 function slotChipStyle(slot, overflow, extra) {
+  const background = overflow ? '#d32f2f' : slotBackground(slot) || '#e0e0e0'
   return {
     display: 'inline-block',
     minWidth: '70px',
@@ -107,8 +96,8 @@ function slotChipStyle(slot, overflow, extra) {
     fontSize: '12px',
     fontWeight: 'bold',
     textAlign: 'center',
-    color: overflow || SLOT_COLORS[slot] ? '#fff' : '#333',
-    background: overflow ? '#d32f2f' : SLOT_COLORS[slot] || '#e0e0e0',
+    color: overflow || slotBackground(slot) ? '#fff' : '#333',
+    background,
     ...extra,
   }
 }
