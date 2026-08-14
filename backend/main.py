@@ -286,6 +286,32 @@ class RosterPositionsUpdate(BaseModel):
     user_id: str
     positions: dict[str, int]
 
+def reconcile_starters(old_positions, new_positions, old_starters):
+    """Re-map a starters array from an old roster-slot template to a new one,
+    matched by slot type (not raw index) so unrelated starters never appear to
+    "slide" into a different-looking slot. Per type: existing assignments are
+    kept in their original order up to the new count; a shrunk slot's excess
+    players are simply dropped (they fall back to the bench automatically,
+    since bench = roster players minus whoever's left in starters); a grown
+    slot's new spot is filled with "0" (empty) rather than pulling a player
+    into it."""
+    old_starter_slots = [s for s in old_positions if s != "BN"]
+    new_starter_slots = [s for s in new_positions if s != "BN"]
+
+    old_by_type = {}
+    for i, slot in enumerate(old_starter_slots):
+        old_by_type.setdefault(slot, []).append(old_starters[i] if i < len(old_starters) else "0")
+
+    consumed = {}
+    new_starters = []
+    for slot in new_starter_slots:
+        idx = consumed.get(slot, 0)
+        existing = old_by_type.get(slot, [])
+        new_starters.append(existing[idx] if idx < len(existing) else "0")
+        consumed[slot] = idx + 1
+
+    return new_starters
+
 @app.put("/league/{league_id}/roster-positions")
 def update_roster_positions(league_id: str, payload: RosterPositionsUpdate, db: Session = Depends(get_db)):
     league = db.query(League).filter(League.league_id == league_id).first()
@@ -303,9 +329,23 @@ def update_roster_positions(league_id: str, payload: RosterPositionsUpdate, db: 
     if is_superseded:
         raise HTTPException(status_code=403, detail="Roster settings for past seasons cannot be edited")
 
+    old_positions = json.loads(league.roster_positions) if league.roster_positions else []
     new_positions = []
     for slot in ROSTER_SLOT_ORDER:
         new_positions += [slot] * max(0, int(payload.positions.get(slot, 0)))
+
+    # Every roster's live lineup is built against this same league-wide
+    # template, so all of them need remapping, not just the commissioner's.
+    for roster in db.query(Roster).filter(Roster.league_id == league_id).all():
+        roster.starters = reconcile_starters(old_positions, new_positions, roster.starters or [])
+
+    # Any week that already has its own locally-set lineup (current or a
+    # future week someone pre-planned) needs the same remap - a locked/past
+    # week is left untouched since it's a historical record, not a plan.
+    for matchup in db.query(Matchup).filter(Matchup.league_id == league_id).all():
+        if matchup.starters and week_editable(db, league, matchup.week):
+            old_m_starters = json.loads(matchup.starters)
+            matchup.starters = json.dumps(reconcile_starters(old_positions, new_positions, old_m_starters))
 
     league.roster_positions = json.dumps(new_positions)
     db.commit()
