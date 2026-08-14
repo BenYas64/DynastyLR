@@ -160,11 +160,6 @@ export default function RosterSettings() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      {isCommish && (
-        <p style={{ fontWeight: 'bold', color: '#1a1a2e', marginBottom: '4px' }}>
-          Commissioner View{!canEdit && ' (read-only — past season)'}
-        </p>
-      )}
       <h2>Roster Settings</h2>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
         <p style={{ color: '#666', margin: 0 }}>{league.name}</p>
