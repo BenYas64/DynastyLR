@@ -7,22 +7,30 @@ const API = 'https://api.dynastylr.site'
 // type strings (mirrors FLEX_ELIGIBLE_POSITIONS used elsewhere for slot logic).
 // Colors follow the same palette as the position chips on the roster/matchup
 // pages where they overlap (QB/RB/WR/TE/FLEX/SUPER_FLEX).
+const QB_COLOR = '#d32f2f'
+const RB_COLOR = '#2e7d32'
+const WR_COLOR = '#1976d2'
+const TE_COLOR = '#d26019'
+
+// Flex-type slots already blend 2-4 real positions, so their chips use a
+// gradient of those positions' own colors instead of a single flat color -
+// everything else (a single true position) stays a flat color.
 const SLOT_ORDER = [
-  ['QB', 'QB', 'Quarterback', '#d32f2f'],
-  ['RB', 'RB', 'Running Back', '#2e7d32'],
-  ['WR', 'WR', 'Wide Receiver', '#1976d2'],
-  ['TE', 'TE', 'Tight End', '#d26019'],
-  ['FLEX', 'FLX', 'Flex (RB/WR/TE)', '#7b1fa2'],
-  ['WRRB_FLEX', 'FLX', 'Flex (RB/WR)', '#7b1fa2'],
-  ['REC_FLEX', 'FLX', 'Flex (WR/TE)', '#7b1fa2'],
-  ['SUPER_FLEX', 'SFX', 'Super Flex (QB/RB/WR/TE)', '#d32f2f'],
+  ['QB', 'QB', 'Quarterback', QB_COLOR],
+  ['RB', 'RB', 'Running Back', RB_COLOR],
+  ['WR', 'WR', 'Wide Receiver', WR_COLOR],
+  ['TE', 'TE', 'Tight End', TE_COLOR],
+  ['FLEX', 'FLX', 'Flex (RB/WR/TE)', [RB_COLOR, WR_COLOR, TE_COLOR]],
+  ['WRRB_FLEX', 'FLX', 'Flex (RB/WR)', [RB_COLOR, WR_COLOR]],
+  ['REC_FLEX', 'FLX', 'Flex (WR/TE)', [WR_COLOR, TE_COLOR]],
+  ['SUPER_FLEX', 'SFX', 'Super Flex (QB/RB/WR/TE)', [QB_COLOR, RB_COLOR, WR_COLOR, TE_COLOR]],
   ['K', 'K', 'Kicker', '#ec4899'],
   ['DEF', 'DEF', 'Defense', '#795548'],
   ['BN', 'BN', 'Bench', '#9e9e9e'],
   ['DL', 'DL', 'Defensive Linemen', '#f57c00'],
   ['LB', 'LB', 'Linebacker', '#fbc02d'],
   ['DB', 'DB', 'Defensive Back', '#43a047'],
-  ['IDP_FLEX', 'IDP', 'IDP Flex', '#000000'],
+  ['IDP_FLEX', 'IDP', 'IDP Flex', ['#f57c00', '#fbc02d', '#43a047']],
 ]
 
 function chipStyle(color) {
@@ -36,7 +44,7 @@ function chipStyle(color) {
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#fff',
-    background: color,
+    background: Array.isArray(color) ? `linear-gradient(135deg, ${color.join(', ')})` : color,
   }
 }
 
