@@ -273,6 +273,45 @@ def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: 
 
     return {"league_id": league_id, "scoring_settings": payload.scoring_settings}
 
+# Canonical slot order the roster-positions editor writes back in. BN entries
+# can sit anywhere in the array without affecting starter-slot indexing (slot
+# rows are filtered out and re-derived from this only by count elsewhere), so
+# placement here is purely cosmetic/ordering, not functional.
+ROSTER_SLOT_ORDER = [
+    "QB", "RB", "WR", "TE", "FLEX", "WRRB_FLEX", "REC_FLEX", "SUPER_FLEX",
+    "K", "DEF", "BN", "DL", "LB", "DB", "IDP_FLEX",
+]
+
+class RosterPositionsUpdate(BaseModel):
+    user_id: str
+    positions: dict[str, int]
+
+@app.put("/league/{league_id}/roster-positions")
+def update_roster_positions(league_id: str, payload: RosterPositionsUpdate, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    membership = db.query(LeagueUser).filter(
+        LeagueUser.league_id == league_id,
+        LeagueUser.user_id == payload.user_id,
+    ).first()
+    if not membership or not membership.commish:
+        raise HTTPException(status_code=403, detail="Only the league commissioner can edit roster settings")
+
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    if is_superseded:
+        raise HTTPException(status_code=403, detail="Roster settings for past seasons cannot be edited")
+
+    new_positions = []
+    for slot in ROSTER_SLOT_ORDER:
+        new_positions += [slot] * max(0, int(payload.positions.get(slot, 0)))
+
+    league.roster_positions = json.dumps(new_positions)
+    db.commit()
+
+    return {"league_id": league_id, "roster_positions": new_positions}
+
 @app.get("/league/{league_id}/rosters")
 def get_rosters(league_id: str, db: Session = Depends(get_db)):
     rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
