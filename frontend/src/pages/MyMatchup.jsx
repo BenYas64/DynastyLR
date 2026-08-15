@@ -8,6 +8,13 @@ import { SLOT_LABELS, slotBackground } from '../positionColors.js'
 
 const API = 'https://api.dynastylr.site'
 
+function humanizeKey(key) {
+  return key
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
 // Mirrors RosterSlots.jsx's slot-building/eligibility logic exactly, so bench
 // ordering and move rules behave identically to the roster page.
 const BENCH_POSITION_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3 }
@@ -114,6 +121,9 @@ export default function MyMatchup() {
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState(null)
 
+  const [breakdown, setBreakdown] = useState(null)
+  const [breakdownSheetOpen, setBreakdownSheetOpen] = useState(false)
+
   const load = () => {
     if (!leagueId) return
     if (!urlRosterId && (!user || !selectedLeagueId)) return
@@ -175,6 +185,22 @@ export default function MyMatchup() {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prevOverflow }
   }, [pickerRow])
+
+  useEffect(() => {
+    if (!breakdown) {
+      setBreakdownSheetOpen(false)
+      return
+    }
+    const id = requestAnimationFrame(() => setBreakdownSheetOpen(true))
+    return () => cancelAnimationFrame(id)
+  }, [breakdown])
+
+  useEffect(() => {
+    if (!breakdown) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prevOverflow }
+  }, [breakdown])
 
   if (!urlRosterId && (!user || !selectedLeagueId)) return (
     <p style={{ padding: '20px' }}>Sign in and select a league on the Account page to view your matchup.</p>
@@ -241,6 +267,24 @@ export default function MyMatchup() {
       .catch(err => {
         setMoving(false)
         setMoveError(err.message)
+      })
+  }
+
+  const closeBreakdown = () => setBreakdown(null)
+
+  const openBreakdown = (playerId) => {
+    const player = players[playerId]
+    setBreakdown({ playerId, player, loading: true, error: null, total: 0, rows: [] })
+    fetch(`${API}/league/${leagueId}/players/${playerId}/stat-breakdown/${data.week}`)
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to load stats') })
+        return r.json()
+      })
+      .then(result => {
+        setBreakdown({ playerId, player, loading: false, error: null, total: result.total, rows: result.breakdown })
+      })
+      .catch(err => {
+        setBreakdown({ playerId, player, loading: false, error: err.message, total: 0, rows: [] })
       })
   }
 
@@ -354,7 +398,10 @@ export default function MyMatchup() {
                   <span>{leftRow ? (leftPlayer ? `${leftPlayer.first_name} ${leftPlayer.last_name} - ${leftPlayer.team || 'FA'}` : 'Empty') : ''}</span>
                 </div>
 
-                <div style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                <div
+                  onClick={() => leftPlayer && openBreakdown(leftRow.playerId)}
+                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: leftPlayer ? 'pointer' : 'default', textDecoration: leftPlayer ? 'underline dotted' : 'none' }}
+                >
                   {leftPlayer ? pointsFor(leftRow.playerId).toFixed(2) : (leftRow ? '-' : '')}
                 </div>
 
@@ -367,7 +414,10 @@ export default function MyMatchup() {
                   </span>
                 </div>
 
-                <div style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                <div
+                  onClick={() => rightPlayer && openBreakdown(rightRow.playerId)}
+                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: rightPlayer ? 'pointer' : 'default', textDecoration: rightPlayer ? 'underline dotted' : 'none' }}
+                >
                   {rightPlayer ? pointsFor(rightRow.playerId).toFixed(2) : (rightRow ? '-' : '')}
                 </div>
 
@@ -390,6 +440,80 @@ export default function MyMatchup() {
           )
         })}
       </div>
+
+      {breakdown && (
+        <>
+          <div
+            onClick={closeBreakdown}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000 }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              maxHeight: '60vh',
+              overflowY: 'auto',
+              background: '#1a1a2e',
+              color: '#fff',
+              borderTopLeftRadius: '16px',
+              borderTopRightRadius: '16px',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.25)',
+              padding: '16px 20px 24px',
+              zIndex: 1001,
+              transform: breakdownSheetOpen ? 'translateY(0)' : 'translateY(100%)',
+              transition: 'transform 0.25s ease-out',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0 }}>
+                {breakdown.player ? `${breakdown.player.first_name} ${breakdown.player.last_name}` : 'Player'} &ndash; Week {data.week}
+              </h3>
+              <button
+                onClick={closeBreakdown}
+                style={{ background: 'none', border: 'none', fontSize: '22px', lineHeight: 1, cursor: 'pointer', color: '#fff' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {breakdown.loading ? (
+              <p style={{ color: '#aaa' }}>Loading...</p>
+            ) : breakdown.error ? (
+              <p style={{ color: '#ff6b6b' }}>{breakdown.error}</p>
+            ) : breakdown.rows.length === 0 ? (
+              <p style={{ color: '#aaa' }}>No stats recorded for this week.</p>
+            ) : (
+              <>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '6px', color: '#aaa', fontWeight: 'normal' }}>Stat</th>
+                      <th style={{ textAlign: 'right', padding: '6px', color: '#aaa', fontWeight: 'normal' }}>Value</th>
+                      <th style={{ textAlign: 'right', padding: '6px', color: '#aaa', fontWeight: 'normal' }}>Per Unit</th>
+                      <th style={{ textAlign: 'right', padding: '6px', color: '#aaa', fontWeight: 'normal' }}>Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdown.rows.map(row => (
+                      <tr key={row.key} style={{ borderBottom: '1px solid #33334d' }}>
+                        <td style={{ padding: '6px' }}>{humanizeKey(row.key)}</td>
+                        <td style={{ padding: '6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.value}</td>
+                        <td style={{ padding: '6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.weight}pts</td>
+                        <td style={{ padding: '6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.points.toFixed(2)}pts</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ marginTop: '12px', fontWeight: 'bold', textAlign: 'right' }}>
+                  Total: {breakdown.total.toFixed(2)}pts
+                </p>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {pickerRowData && (
         <>

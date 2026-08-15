@@ -187,6 +187,36 @@ def get_weekly_rank(league_id: str, player_id: str, season: int, db: Session = D
     ranks = position_week_ranks(db, league, season, player.position)
     return ranks.get(player_id, {})
 
+@app.get("/league/{league_id}/players/{player_id}/stat-breakdown/{week}")
+def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = Depends(get_db)):
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    stat = db.query(Stat).filter(
+        Stat.player_id == player_id, Stat.season == league.season, Stat.week == week, Stat.season_type == "regular"
+    ).first()
+    if not stat:
+        return {"total": 0, "breakdown": []}
+
+    scoring_settings = json.loads(league.scoring_settings) if league.scoring_settings else {}
+
+    breakdown = []
+    total = 0.0
+    for col in Stat.__table__.columns:
+        key = col.name
+        if key in NON_STAT_COLUMNS:
+            continue
+        weight = scoring_settings.get(key)
+        value = getattr(stat, key)
+        if not weight or not value:
+            continue
+        points = value * weight
+        total += points
+        breakdown.append({"key": key, "value": value, "weight": weight, "points": points})
+
+    return {"total": total, "breakdown": breakdown}
+
 @app.get("/leagues/{user_id}")
 def get_leagues(user_id: str, season: int | None = None, db: Session = Depends(get_db)):
     leagues = (
