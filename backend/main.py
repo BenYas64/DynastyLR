@@ -647,10 +647,20 @@ def matchup_payload(db, league, week, roster_id):
         if rj:
             relevant_ids.update(p for p in rj["players"] if p and p != '0')
 
+    # The handful of box-score numbers shown inline under each player, on top
+    # of their computed fantasy points - just enough to explain the score at
+    # a glance, not the full stat-breakdown popup's every scored category.
+    BOX_SCORE_COLUMNS = [
+        "rec", "rec_yd", "rec_td",
+        "rush_att", "rush_yd", "rush_td",
+        "pass_yd", "pass_td", "pass_int",
+    ]
+
     week_points = {}
+    week_stats = {}
     if relevant_ids:
         rows = (
-            db.query(Stat.player_id, scoring_expression(league))
+            db.query(Stat.player_id, scoring_expression(league), *[getattr(Stat, c) for c in BOX_SCORE_COLUMNS])
             .filter(
                 Stat.season == league.season,
                 Stat.week == week,
@@ -659,7 +669,10 @@ def matchup_payload(db, league, week, roster_id):
             )
             .all()
         )
-        week_points = {player_id: pts or 0 for player_id, pts in rows}
+        for row in rows:
+            player_id, pts, *box = row
+            week_points[player_id] = pts or 0
+            week_stats[player_id] = {col: val or 0 for col, val in zip(BOX_SCORE_COLUMNS, box)}
 
     return {
         "week": week,
@@ -667,6 +680,7 @@ def matchup_payload(db, league, week, roster_id):
         "my_roster": my_json,
         "opp_roster": opp_json,
         "week_points": week_points,
+        "week_stats": week_stats,
         "editable": editable,
     }
 

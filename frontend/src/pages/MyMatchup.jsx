@@ -15,6 +15,26 @@ function humanizeKey(key) {
     .join(' ')
 }
 
+// Compact inline summary shown under each player - just enough box-score
+// context to explain the fantasy score at a glance, not the full breakdown.
+const BOX_SCORE_ORDER = [
+  ['rec', 'rec'],
+  ['rec_yd', 'rec yd'],
+  ['rec_td', 'rec TD'],
+  ['rush_att', 'car'],
+  ['rush_yd', 'rush yd'],
+  ['rush_td', 'rush TD'],
+  ['pass_yd', 'pass yd'],
+  ['pass_td', 'pass TD'],
+  ['pass_int', 'INT'],
+]
+
+function boxScoreLine(stats) {
+  if (!stats) return null
+  const parts = BOX_SCORE_ORDER.filter(([key]) => stats[key]).map(([key, label]) => `${stats[key]} ${label}`)
+  return parts.length ? parts.join(', ') : null
+}
+
 // Mirrors RosterSlots.jsx's slot-building/eligibility logic exactly, so bench
 // ordering and move rules behave identically to the roster page.
 const BENCH_POSITION_ORDER = { QB: 0, RB: 1, WR: 2, TE: 3 }
@@ -366,6 +386,9 @@ export default function MyMatchup() {
           const chipEditable = (editableSide === 'left' && leftRow) || (editableSide === 'right' && rightRow)
           const chipRowIndex = editableSide === 'left' ? i : editableSide === 'right' ? i : null
 
+          const leftStatLine = leftPlayer ? boxScoreLine(data.week_stats?.[leftRow.playerId]) : null
+          const rightStatLine = rightPlayer ? boxScoreLine(data.week_stats?.[rightRow.playerId]) : null
+
           return (
             <div key={i}>
               {showHeader && (
@@ -385,22 +408,25 @@ export default function MyMatchup() {
               >
                 <div
                   onClick={() => leftPlayer && openPlayer(leftRow.playerId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', textAlign: 'right', cursor: leftPlayer ? 'pointer' : 'default' }}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', textAlign: 'right', cursor: leftPlayer ? 'pointer' : 'default' }}
                 >
-                  {leftPlayer && (
-                    <img
-                      src={headshotUrl(leftRow.playerId)}
-                      onError={onHeadshotError}
-                      alt=""
-                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                    />
-                  )}
-                  <span>{leftRow ? (leftPlayer ? `${leftPlayer.first_name} ${leftPlayer.last_name} - ${leftPlayer.team || 'FA'}` : 'Empty') : ''}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {leftPlayer && (
+                      <img
+                        src={headshotUrl(leftRow.playerId)}
+                        onError={onHeadshotError}
+                        alt=""
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                      />
+                    )}
+                    <span>{leftRow ? (leftPlayer ? `${leftPlayer.first_name} ${leftPlayer.last_name} - ${leftPlayer.team || 'FA'}` : 'Empty') : ''}</span>
+                  </div>
+                  {leftStatLine && <span style={{ fontSize: '11px', color: '#888' }}>{leftStatLine}</span>}
                 </div>
 
                 <div
                   onClick={() => leftPlayer && openBreakdown(leftRow.playerId)}
-                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: leftPlayer ? 'pointer' : 'default', textDecoration: leftPlayer ? 'underline dotted' : 'none' }}
+                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: leftPlayer ? 'pointer' : 'default' }}
                 >
                   {leftPlayer ? pointsFor(leftRow.playerId).toFixed(2) : (leftRow ? '-' : '')}
                 </div>
@@ -416,24 +442,27 @@ export default function MyMatchup() {
 
                 <div
                   onClick={() => rightPlayer && openBreakdown(rightRow.playerId)}
-                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: rightPlayer ? 'pointer' : 'default', textDecoration: rightPlayer ? 'underline dotted' : 'none' }}
+                  style={{ textAlign: 'center', fontWeight: 'bold', cursor: rightPlayer ? 'pointer' : 'default' }}
                 >
                   {rightPlayer ? pointsFor(rightRow.playerId).toFixed(2) : (rightRow ? '-' : '')}
                 </div>
 
                 <div
                   onClick={() => rightPlayer && openPlayer(rightRow.playerId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: rightPlayer ? 'pointer' : 'default' }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '2px', cursor: rightPlayer ? 'pointer' : 'default' }}
                 >
-                  <span>{rightRow ? (rightPlayer ? `${rightPlayer.first_name} ${rightPlayer.last_name} - ${rightPlayer.team || 'FA'}` : 'Empty') : ''}</span>
-                  {rightPlayer && (
-                    <img
-                      src={headshotUrl(rightRow.playerId)}
-                      onError={onHeadshotError}
-                      alt=""
-                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                    />
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{rightRow ? (rightPlayer ? `${rightPlayer.first_name} ${rightPlayer.last_name} - ${rightPlayer.team || 'FA'}` : 'Empty') : ''}</span>
+                    {rightPlayer && (
+                      <img
+                        src={headshotUrl(rightRow.playerId)}
+                        onError={onHeadshotError}
+                        alt=""
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                      />
+                    )}
+                  </div>
+                  {rightStatLine && <span style={{ fontSize: '11px', color: '#888' }}>{rightStatLine}</span>}
                 </div>
               </div>
             </div>
