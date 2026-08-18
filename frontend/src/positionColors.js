@@ -21,12 +21,13 @@ export const SLOT_COLORS = {
   WRRB_FLEX: [POSITION_COLORS.RB, POSITION_COLORS.WR],
   REC_FLEX: [POSITION_COLORS.WR, POSITION_COLORS.TE],
   // Explicit stops (not evenly-spaced like the other flex gradients) so QB
-  // owns a clean, solid first half with a hard edge into the other three
-  // positions, rather than QB just being one of several blended colors.
+  // stays solid across roughly the first half before softly blending into
+  // the other three positions - no two stops share a position, so there's
+  // no hard seam.
   SUPER_FLEX: [
-    `${POSITION_COLORS.QB} 50%`,
-    `${POSITION_COLORS.RB} 50%`,
-    `${POSITION_COLORS.WR} 75%`,
+    `${POSITION_COLORS.QB} 40%`,
+    `${POSITION_COLORS.RB} 60%`,
+    `${POSITION_COLORS.WR} 80%`,
     `${POSITION_COLORS.TE} 100%`,
   ],
   IDP_FLEX: [POSITION_COLORS.DL, POSITION_COLORS.LB, POSITION_COLORS.DB],
