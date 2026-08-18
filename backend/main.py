@@ -560,7 +560,11 @@ _nfl_state_cache = {"computed_at": 0, "week": None}
 
 def current_nfl_week():
     """Sleeper's own notion of 'what week is it right now', used to pick the
-    upcoming/live matchup rather than a hardcoded or guessed week number."""
+    upcoming/live matchup rather than a hardcoded or guessed week number.
+    League matchups are numbered 1-18 for the regular season only, so
+    Sleeper's "week" is only meaningful once season_type is "regular" -
+    during preseason it's a preseason week count (e.g. week 2 of preseason)
+    that doesn't correspond to any league matchup, so week 1 is used instead."""
     now = time.time()
     if _nfl_state_cache["week"] is not None and now - _nfl_state_cache["computed_at"] < CACHE_TTL_SECONDS:
         return _nfl_state_cache["week"]
@@ -568,7 +572,8 @@ def current_nfl_week():
     try:
         resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
         resp.raise_for_status()
-        week = resp.json().get("week") or week
+        state = resp.json()
+        week = state.get("week") or week if state.get("season_type") == "regular" else 1
     except Exception:
         pass
     _nfl_state_cache.update({"computed_at": now, "week": week})

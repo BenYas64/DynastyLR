@@ -332,6 +332,23 @@ class Stat(Base):
     yds_allow_500_549 = Column(Float)
     yds_allow_550p = Column(Float)
 
+# Same columns as Stat (built from it directly so the two schemas can never
+# drift apart), but for Sleeper's projected stats rather than actual ones -
+# kept in a separate table since projections are a moving forecast that gets
+# overwritten multiple times before kickoff, not a historical record.
+_PROJECTION_KEY_COLUMNS = {"player_id", "season", "week", "season_type"}
+_projection_attrs = {
+    "__tablename__": "player_projections",
+    "player_id": Column(String, primary_key=True),
+    "season": Column(Integer, primary_key=True),
+    "week": Column(Integer, primary_key=True),
+    "season_type": Column(String, primary_key=True, default="regular"),
+}
+for _col in Stat.__table__.columns:
+    if _col.name not in _PROJECTION_KEY_COLUMNS:
+        _projection_attrs[_col.name] = Column(_col.type.__class__())
+Projection = type("Projection", (Base,), _projection_attrs)
+
 class User(Base):
     __tablename__ = "users"
     user_id = Column(String, primary_key=True)

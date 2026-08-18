@@ -25,9 +25,9 @@ export const SLOT_COLORS = {
   // the other three positions - no two stops share a position, so there's
   // no hard seam.
   SUPER_FLEX: [
-    `${POSITION_COLORS.QB} 40%`,
-    `${POSITION_COLORS.TE} 60%`,
-    `${POSITION_COLORS.RB} 80%`,
+    `${POSITION_COLORS.QB} 37%`,
+    `${POSITION_COLORS.TE} 58%`,
+    `${POSITION_COLORS.RB} 79%`,
     `${POSITION_COLORS.WR} 100%`,
   ],
   IDP_FLEX: [POSITION_COLORS.DL, POSITION_COLORS.LB, POSITION_COLORS.DB],
