@@ -81,9 +81,81 @@ function eligibleForSlot(player, slotType) {
   return playerPositions(player).some(p => eligible.includes(p))
 }
 
+// Approximate "best possible lineup" - only touches open starter slots
+// (empty, or holding someone who hasn't played yet this week). Mirrors
+// computeOptimalLineup in MyMatchup.jsx.
+function computeOptimalLineup(starterSlots, roster, players, pointsFor, hasActual) {
+  const currentStarters = roster?.starters || []
+  const rosterPlayerIds = roster?.players || []
+
+  const slots = starterSlots.map((slotType, i) => {
+    const currentId = currentStarters[i] && currentStarters[i] !== '0' ? currentStarters[i] : null
+    return { index: i, slotType, currentId, locked: currentId ? hasActual(currentId) : false }
+  })
+
+  const available = rosterPlayerIds.filter(id => id && id !== '0' && !hasActual(id))
+  const singlePos = []
+  const multiPos = []
+  available.forEach(id => {
+    const positions = playerPositions(players[id])
+    ;(positions.length <= 1 ? singlePos : multiPos).push(id)
+  })
+
+  const assignments = {}
+  const used = new Set()
+
+  const bestCandidate = (pool, slotType) => {
+    let best = null
+    pool.forEach(id => {
+      if (used.has(id) || !eligibleForSlot(players[id], slotType)) return
+      if (!best || pointsFor(id) > pointsFor(best)) best = id
+    })
+    return best
+  }
+
+  const singleSlots = slots.filter(s => !s.locked && !FLEX_ELIGIBLE_POSITIONS[s.slotType])
+  singleSlots.forEach(slot => {
+    const best = bestCandidate(singlePos, slot.slotType)
+    if (best) { assignments[slot.index] = best; used.add(best) }
+  })
+
+  ;[...multiPos].sort((a, b) => pointsFor(b) - pointsFor(a)).forEach(id => {
+    if (used.has(id)) return
+    const eligibleSlots = singleSlots.filter(s => assignments[s.index] && eligibleForSlot(players[id], s.slotType))
+    if (!eligibleSlots.length) return
+    const worst = eligibleSlots.reduce((w, s) => pointsFor(assignments[s.index]) < pointsFor(assignments[w.index]) ? s : w)
+    if (pointsFor(id) > pointsFor(assignments[worst.index])) {
+      used.delete(assignments[worst.index])
+      assignments[worst.index] = id
+      used.add(id)
+    }
+  })
+
+  const flexSlots = slots.filter(s => !s.locked && FLEX_ELIGIBLE_POSITIONS[s.slotType])
+  const remainingPool = [...singlePos, ...multiPos]
+  flexSlots.forEach(slot => {
+    const best = bestCandidate(remainingPool, slot.slotType)
+    if (best) { assignments[slot.index] = best; used.add(best) }
+  })
+
+  return slots
+    .filter(s => assignments[s.index] && assignments[s.index] !== s.currentId)
+    .map(s => ({ slotIndex: s.index, playerId: assignments[s.index] }))
+}
+
 const SECTION_LABELS = {
   starter: 'Starters',
   bench: 'Bench',
+}
+
+const optimizeButtonStyle = {
+  fontSize: '12px',
+  padding: '4px 10px',
+  borderRadius: '6px',
+  border: '1px solid #ccc',
+  background: '#fff',
+  color: '#0064a2',
+  cursor: 'pointer',
 }
 
 function slotChipStyle(slot, overflow, extra) {
@@ -106,12 +178,15 @@ function slotChipStyle(slot, overflow, extra) {
 export default function RosterSlots({
   rosterPositions, starters, allPlayers, playersMap,
   editable, leagueId, userId, week, onMoved,
+  weekPoints, weekProjections,
 }) {
   const { openPlayer } = usePlayerModal()
   const [pickerRow, setPickerRow] = useState(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState(null)
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizeError, setOptimizeError] = useState(null)
 
   useEffect(() => {
     if (pickerRow === null) {
@@ -133,6 +208,45 @@ export default function RosterSlots({
 
   const rows = buildSlotRows(rosterPositions, starters, allPlayers, playersMap)
   const starterSlots = rosterPositions.filter(p => p !== 'BN')
+
+  // Points are optional - only passed by pages (e.g. MyTeam) that fetched
+  // week_points/week_projections. When absent, the points column and
+  // Optimize Lineup button just don't render.
+  const showPoints = !!weekPoints
+  const hasActual = (id) => !!id && id !== '0' && !!weekPoints && Object.prototype.hasOwnProperty.call(weekPoints, id)
+  const isProjected = (id) => !!id && id !== '0' && !hasActual(id) && !!weekProjections && Object.prototype.hasOwnProperty.call(weekProjections, id)
+  const pointsFor = (id) => {
+    if (!id || id === '0') return 0
+    if (hasActual(id)) return weekPoints[id] ?? 0
+    return weekProjections?.[id] ?? 0
+  }
+
+  const runOptimizeLineup = async () => {
+    const moves = computeOptimalLineup(starterSlots, { starters, players: allPlayers }, playersMap, pointsFor, hasActual)
+    if (!moves.length) return
+    setOptimizing(true)
+    setOptimizeError(null)
+    try {
+      // Sequential, not Promise.all - /set-slot reads current starters fresh
+      // from the DB on each call, so firing these in parallel could race.
+      for (const { slotIndex, playerId } of moves) {
+        const res = await fetch(`${API}/league/${leagueId}/set-slot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, week, player_id: playerId, slot_index: slotIndex }),
+        })
+        if (!res.ok) {
+          const d = await res.json()
+          throw new Error(d.detail || 'Failed to move player')
+        }
+      }
+      onMoved && onMoved()
+    } catch (err) {
+      setOptimizeError(err.message)
+    } finally {
+      setOptimizing(false)
+    }
+  }
 
   const closePicker = () => {
     setPickerRow(null)
@@ -208,49 +322,79 @@ export default function RosterSlots({
         return (
           <div key={i}>
             {showHeader && (
-              <h3
+              <div
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                   margin: i === 0 ? '0 0 8px' : '20px 0 8px',
-                  fontSize: '14px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  color: '#666',
                 }}
               >
-                {SECTION_LABELS[row.section]}
-              </h3>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: '#666',
+                  }}
+                >
+                  {SECTION_LABELS[row.section]}
+                </h3>
+                {row.section === 'starter' && editable && showPoints && (
+                  <button onClick={runOptimizeLineup} disabled={optimizing} style={optimizeButtonStyle}>
+                    {optimizing ? 'Optimizing…' : 'Optimize Lineup'}
+                  </button>
+                )}
+              </div>
+            )}
+            {row.section === 'starter' && showHeader && optimizeError && (
+              <p style={{ color: 'red', fontSize: '12px', margin: '0 0 8px' }}>{optimizeError}</p>
             )}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 padding: '6px 0',
                 borderBottom: '1px solid #eee',
               }}
             >
-              <span
-                onClick={clickable ? () => setPickerRow(i) : undefined}
-                style={slotChipStyle(row.slot, row.overflow, { cursor: clickable ? 'pointer' : 'default' })}
-              >
-                {SLOT_LABELS[row.slot] || row.slot}
-              </span>
-              {player ? (
+              <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
                 <span
-                  onClick={() => openPlayer(row.playerId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit', cursor: 'pointer', textDecoration: 'none' }}
+                  onClick={clickable ? () => setPickerRow(i) : undefined}
+                  style={slotChipStyle(row.slot, row.overflow, { cursor: clickable ? 'pointer' : 'default' })}
                 >
-                  <img
-                    src={headshotUrl(row.playerId)}
-                    alt=""
-                    style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
-                    onError={onHeadshotError}
-                  />
-                  {player.first_name} {player.last_name} - {player.position} - {player.team}
+                  {SLOT_LABELS[row.slot] || row.slot}
                 </span>
-              ) : row.playerId ? (
-                <span>{row.playerId}</span>
-              ) : (
-                <span style={{ color: '#bbb' }}>Empty</span>
+                {player ? (
+                  <span
+                    onClick={() => openPlayer(row.playerId)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit', cursor: 'pointer', textDecoration: 'none', minWidth: 0 }}
+                  >
+                    <img
+                      src={headshotUrl(row.playerId)}
+                      alt=""
+                      style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', background: '#ddd', flexShrink: 0 }}
+                      onError={onHeadshotError}
+                    />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {player.first_name} {player.last_name} - {player.position} - {player.team}
+                    </span>
+                  </span>
+                ) : row.playerId ? (
+                  <span>{row.playerId}</span>
+                ) : (
+                  <span style={{ color: '#bbb' }}>Empty</span>
+                )}
+              </div>
+              {showPoints && player && (
+                <span style={{ textAlign: 'right', fontWeight: 'bold', flexShrink: 0, marginLeft: '8px' }}>
+                  {pointsFor(row.playerId).toFixed(2)}
+                  {isProjected(row.playerId) && (
+                    <div style={{ fontSize: '10px', fontWeight: 'normal', color: '#888' }}>proj</div>
+                  )}
+                </span>
               )}
             </div>
           </div>

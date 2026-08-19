@@ -629,6 +629,53 @@ def roster_week_snapshot(db, league, roster, week, editable):
         "players": players if players else (roster.players or []),
     }
 
+# The handful of box-score numbers shown inline under each player, on top of
+# their computed fantasy points - just enough to explain the score at a
+# glance, not the full stat-breakdown popup's every scored category.
+BOX_SCORE_COLUMNS = [
+    "rec", "rec_yd", "rec_td",
+    "rush_att", "rush_yd", "rush_td",
+    "pass_yd", "pass_td", "pass_int",
+]
+
+def week_points_and_projections(db, league, week, player_ids):
+    week_points = {}
+    week_stats = {}
+    if player_ids:
+        rows = (
+            db.query(Stat.player_id, scoring_expression(league), *[getattr(Stat, c) for c in BOX_SCORE_COLUMNS])
+            .filter(
+                Stat.season == league.season,
+                Stat.week == week,
+                Stat.season_type == "regular",
+                Stat.player_id.in_(player_ids),
+            )
+            .all()
+        )
+        for row in rows:
+            player_id, pts, *box = row
+            week_points[player_id] = pts or 0
+            week_stats[player_id] = {col: val or 0 for col, val in zip(BOX_SCORE_COLUMNS, box)}
+
+    # Projected points fill in for players who don't have an actual stat row
+    # yet (future/upcoming weeks, or a bye-week/pre-game player this week) -
+    # the frontend falls back to these wherever week_points has no entry.
+    week_projections = {}
+    if player_ids:
+        proj_rows = (
+            db.query(Projection.player_id, scoring_expression(league, Projection))
+            .filter(
+                Projection.season == league.season,
+                Projection.week == week,
+                Projection.season_type == "regular",
+                Projection.player_id.in_(player_ids),
+            )
+            .all()
+        )
+        week_projections = {player_id: pts or 0 for player_id, pts in proj_rows}
+
+    return week_points, week_stats, week_projections
+
 def matchup_payload(db, league, week, roster_id):
     my_roster = db.query(Roster).filter(
         Roster.league_id == league.league_id, Roster.roster_id == roster_id
@@ -665,49 +712,7 @@ def matchup_payload(db, league, week, roster_id):
         if rj:
             relevant_ids.update(p for p in rj["players"] if p and p != '0')
 
-    # The handful of box-score numbers shown inline under each player, on top
-    # of their computed fantasy points - just enough to explain the score at
-    # a glance, not the full stat-breakdown popup's every scored category.
-    BOX_SCORE_COLUMNS = [
-        "rec", "rec_yd", "rec_td",
-        "rush_att", "rush_yd", "rush_td",
-        "pass_yd", "pass_td", "pass_int",
-    ]
-
-    week_points = {}
-    week_stats = {}
-    if relevant_ids:
-        rows = (
-            db.query(Stat.player_id, scoring_expression(league), *[getattr(Stat, c) for c in BOX_SCORE_COLUMNS])
-            .filter(
-                Stat.season == league.season,
-                Stat.week == week,
-                Stat.season_type == "regular",
-                Stat.player_id.in_(relevant_ids),
-            )
-            .all()
-        )
-        for row in rows:
-            player_id, pts, *box = row
-            week_points[player_id] = pts or 0
-            week_stats[player_id] = {col: val or 0 for col, val in zip(BOX_SCORE_COLUMNS, box)}
-
-    # Projected points fill in for players who don't have an actual stat row
-    # yet (future/upcoming weeks, or a bye-week/pre-game player this week) -
-    # the frontend falls back to these wherever week_points has no entry.
-    week_projections = {}
-    if relevant_ids:
-        proj_rows = (
-            db.query(Projection.player_id, scoring_expression(league, Projection))
-            .filter(
-                Projection.season == league.season,
-                Projection.week == week,
-                Projection.season_type == "regular",
-                Projection.player_id.in_(relevant_ids),
-            )
-            .all()
-        )
-        week_projections = {player_id: pts or 0 for player_id, pts in proj_rows}
+    week_points, week_stats, week_projections = week_points_and_projections(db, league, week, relevant_ids)
 
     return {
         "week": week,
@@ -760,10 +765,16 @@ def get_roster_week(league_id: str, roster_id: int, week: int, db: Session = Dep
     editable = week_editable(db, league, week)
     snapshot = roster_week_snapshot(db, league, roster, week, editable)
 
+    relevant_ids = {p for p in snapshot["players"] if p and p != '0'}
+    week_points, week_stats, week_projections = week_points_and_projections(db, league, week, relevant_ids)
+
     return {
         "week": week,
         "editable": editable,
         "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
+        "week_points": week_points,
+        "week_stats": week_stats,
+        "week_projections": week_projections,
         **snapshot,
     }
 

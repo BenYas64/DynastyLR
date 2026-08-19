@@ -73,11 +73,27 @@ export default function MyTeam() {
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
   if (!roster) return <p style={{ padding: '20px' }}>No roster found.</p>
 
+  const hasActual = (id) => !!id && id !== '0' && !!weekData?.week_points && Object.prototype.hasOwnProperty.call(weekData.week_points, id)
+  const pointsFor = (id) => {
+    if (!id || id === '0') return 0
+    if (hasActual(id)) return weekData.week_points[id] ?? 0
+    return weekData?.week_projections?.[id] ?? 0
+  }
+  const weekStarters = (weekData?.starters || []).filter(id => id && id !== '0')
+  const weekTotal = weekStarters.reduce((sum, id) => sum + pointsFor(id), 0)
+  const weekTotalIsProjected = weekStarters.some(id => !hasActual(id))
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>My Team</h2>
       <p>Record: {roster.settings.wins}W - {roster.settings.losses}L</p>
       <p>Points For: {roster.settings.fpts}</p>
+      {weekData && (
+        <p>
+          Week {week} Points: {weekTotal.toFixed(2)}
+          {weekTotalIsProjected && <span style={{ color: '#888' }}> (proj)</span>}
+        </p>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
         <button
@@ -111,6 +127,8 @@ export default function MyTeam() {
           userId={user.user_id}
           week={week}
           onMoved={load}
+          weekPoints={weekData.week_points}
+          weekProjections={weekData.week_projections}
         />
       )}
     </div>
