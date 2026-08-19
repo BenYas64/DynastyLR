@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, User, League, Roster, LeagueUser, Matchup, BracketMatchup
+from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup
 
 app = FastAPI()
 
@@ -49,16 +49,16 @@ def eligible_positions_for_roster(roster_positions):
 def player_to_dict(player):
     return {c.name: getattr(player, c.name) for c in Player.__table__.columns}
 
-def scoring_expression(league):
-    """SQL expression for a single stat row's fantasy points: a league's weighted
-    scoring_settings if available, otherwise standard PPR."""
-    total = Stat.pts_ppr
+def scoring_expression(league, model=Stat):
+    """SQL expression for a single stat (or projection) row's fantasy points: a
+    league's weighted scoring_settings if available, otherwise standard PPR."""
+    total = model.pts_ppr
     if league and league.scoring_settings:
         scoring_settings = json.loads(league.scoring_settings)
         terms = [
-            func.coalesce(getattr(Stat, key), 0) * weight
+            func.coalesce(getattr(model, key), 0) * weight
             for key, weight in scoring_settings.items()
-            if weight and key not in NON_STAT_COLUMNS and hasattr(Stat, key)
+            if weight and key not in NON_STAT_COLUMNS and hasattr(model, key)
         ]
         if terms:
             total = terms[0]
@@ -196,8 +196,20 @@ def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = 
     stat = db.query(Stat).filter(
         Stat.player_id == player_id, Stat.season == league.season, Stat.week == week, Stat.season_type == "regular"
     ).first()
-    if not stat:
-        return {"total": 0, "breakdown": []}
+
+    # No actual stat line yet (upcoming/in-progress week) - fall back to the
+    # projection so the breakdown popup still has something to show.
+    projected = False
+    source = stat
+    if not source:
+        source = db.query(Projection).filter(
+            Projection.player_id == player_id, Projection.season == league.season,
+            Projection.week == week, Projection.season_type == "regular",
+        ).first()
+        projected = source is not None
+
+    if not source:
+        return {"total": 0, "breakdown": [], "projected": False}
 
     scoring_settings = json.loads(league.scoring_settings) if league.scoring_settings else {}
 
@@ -208,14 +220,14 @@ def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = 
         if key in NON_STAT_COLUMNS:
             continue
         weight = scoring_settings.get(key)
-        value = getattr(stat, key)
+        value = getattr(source, key)
         if not weight or not value:
             continue
         points = value * weight
         total += points
         breakdown.append({"key": key, "value": value, "weight": weight, "points": points})
 
-    return {"total": total, "breakdown": breakdown}
+    return {"total": total, "breakdown": breakdown, "projected": projected}
 
 @app.get("/leagues/{user_id}")
 def get_leagues(user_id: str, season: int | None = None, db: Session = Depends(get_db)):
@@ -679,6 +691,23 @@ def matchup_payload(db, league, week, roster_id):
             week_points[player_id] = pts or 0
             week_stats[player_id] = {col: val or 0 for col, val in zip(BOX_SCORE_COLUMNS, box)}
 
+    # Projected points fill in for players who don't have an actual stat row
+    # yet (future/upcoming weeks, or a bye-week/pre-game player this week) -
+    # the frontend falls back to these wherever week_points has no entry.
+    week_projections = {}
+    if relevant_ids:
+        proj_rows = (
+            db.query(Projection.player_id, scoring_expression(league, Projection))
+            .filter(
+                Projection.season == league.season,
+                Projection.week == week,
+                Projection.season_type == "regular",
+                Projection.player_id.in_(relevant_ids),
+            )
+            .all()
+        )
+        week_projections = {player_id: pts or 0 for player_id, pts in proj_rows}
+
     return {
         "week": week,
         "roster_positions": json.loads(league.roster_positions) if league.roster_positions else [],
@@ -686,6 +715,7 @@ def matchup_payload(db, league, week, roster_id):
         "opp_roster": opp_json,
         "week_points": week_points,
         "week_stats": week_stats,
+        "week_projections": week_projections,
         "editable": editable,
     }
 

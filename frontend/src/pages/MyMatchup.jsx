@@ -254,7 +254,15 @@ export default function MyMatchup() {
   const rightRows = rightRoster ? buildSlotRows(rosterPositions, rightRoster.starters, rightRoster.players, players) : []
   const rowCount = Math.max(leftRows.length, rightRows.length)
 
-  const pointsFor = (id) => (id && id !== '0' ? (data.week_points[id] ?? 0) : 0)
+  // Actual stats win once they exist; until then (upcoming/in-progress weeks,
+  // or a player who hasn't played yet) fall back to Sleeper's projection.
+  const hasActual = (id) => !!id && id !== '0' && Object.prototype.hasOwnProperty.call(data.week_points, id)
+  const isProjected = (id) => !!id && id !== '0' && !hasActual(id) && Object.prototype.hasOwnProperty.call(data.week_projections || {}, id)
+  const pointsFor = (id) => {
+    if (!id || id === '0') return 0
+    if (hasActual(id)) return data.week_points[id] ?? 0
+    return data.week_projections?.[id] ?? 0
+  }
   const leftTotal = (leftRoster.starters || []).reduce((sum, id) => sum + pointsFor(id), 0)
   const rightTotal = (rightRoster?.starters || []).reduce((sum, id) => sum + pointsFor(id), 0)
 
@@ -294,17 +302,17 @@ export default function MyMatchup() {
 
   const openBreakdown = (playerId) => {
     const player = players[playerId]
-    setBreakdown({ playerId, player, loading: true, error: null, total: 0, rows: [] })
+    setBreakdown({ playerId, player, loading: true, error: null, total: 0, rows: [], projected: false })
     fetch(`${API}/league/${leagueId}/players/${playerId}/stat-breakdown/${data.week}`)
       .then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.detail || 'Failed to load stats') })
         return r.json()
       })
       .then(result => {
-        setBreakdown({ playerId, player, loading: false, error: null, total: result.total, rows: result.breakdown })
+        setBreakdown({ playerId, player, loading: false, error: null, total: result.total, rows: result.breakdown, projected: result.projected })
       })
       .catch(err => {
-        setBreakdown({ playerId, player, loading: false, error: err.message, total: 0, rows: [] })
+        setBreakdown({ playerId, player, loading: false, error: err.message, total: 0, rows: [], projected: false })
       })
   }
 
@@ -429,6 +437,9 @@ export default function MyMatchup() {
                   style={{ textAlign: 'center', fontWeight: 'bold', cursor: leftPlayer ? 'pointer' : 'default' }}
                 >
                   {leftPlayer ? pointsFor(leftRow.playerId).toFixed(2) : (leftRow ? '-' : '')}
+                  {leftPlayer && isProjected(leftRow.playerId) && (
+                    <div style={{ fontSize: '10px', fontWeight: 'normal', color: '#888' }}>proj</div>
+                  )}
                 </div>
 
                 <div style={{ textAlign: 'center' }}>
@@ -445,6 +456,9 @@ export default function MyMatchup() {
                   style={{ textAlign: 'center', fontWeight: 'bold', cursor: rightPlayer ? 'pointer' : 'default' }}
                 >
                   {rightPlayer ? pointsFor(rightRow.playerId).toFixed(2) : (rightRow ? '-' : '')}
+                  {rightPlayer && isProjected(rightRow.playerId) && (
+                    <div style={{ fontSize: '10px', fontWeight: 'normal', color: '#888' }}>proj</div>
+                  )}
                 </div>
 
                 <div
@@ -498,6 +512,7 @@ export default function MyMatchup() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <h3 style={{ margin: 0 }}>
                 {breakdown.player ? `${breakdown.player.first_name} ${breakdown.player.last_name}` : 'Player'} &ndash; Week {data.week}
+                {breakdown.projected && <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#aaa' }}> (Projected)</span>}
               </h3>
               <button
                 onClick={closeBreakdown}
