@@ -115,6 +115,79 @@ function eligibleForSlot(player, slotType) {
   return playerPositions(player).some(p => eligible.includes(p))
 }
 
+// Approximate "best possible lineup" for whoever hasn't played yet this week.
+// Players who've already played are locked in place - only open starter
+// slots (empty, or holding someone who hasn't played) are touched.
+function computeOptimalLineup(starterSlots, roster, players, pointsFor, hasActual) {
+  const currentStarters = roster?.starters || []
+  const rosterPlayerIds = roster?.players || []
+
+  const slots = starterSlots.map((slotType, i) => {
+    const currentId = currentStarters[i] && currentStarters[i] !== '0' ? currentStarters[i] : null
+    return { index: i, slotType, currentId, locked: currentId ? hasActual(currentId) : false }
+  })
+
+  // Step 1: every not-yet-played rostered player (starter or bench), split
+  // by how many fantasy positions they carry.
+  const available = rosterPlayerIds.filter(id => id && id !== '0' && !hasActual(id))
+  const singlePos = []
+  const multiPos = []
+  available.forEach(id => {
+    const positions = playerPositions(players[id])
+    ;(positions.length <= 1 ? singlePos : multiPos).push(id)
+  })
+
+  const assignments = {} // slotIndex -> playerId
+  const used = new Set()
+
+  const bestCandidate = (pool, slotType) => {
+    let best = null
+    pool.forEach(id => {
+      if (used.has(id) || !eligibleForSlot(players[id], slotType)) return
+      if (!best || pointsFor(id) > pointsFor(best)) best = id
+    })
+    return best
+  }
+
+  // Step 2: single-position slots, top to bottom, single-position players only.
+  const singleSlots = slots.filter(s => !s.locked && !FLEX_ELIGIBLE_POSITIONS[s.slotType])
+  singleSlots.forEach(slot => {
+    const best = bestCandidate(singlePos, slot.slotType)
+    if (best) { assignments[slot.index] = best; used.add(best) }
+  })
+
+  // Step 3: multi-position players can bump a weaker single-slot starter
+  // they also qualify for. Best-projected multi-position players go first,
+  // so the biggest upgrades happen first.
+  ;[...multiPos].sort((a, b) => pointsFor(b) - pointsFor(a)).forEach(id => {
+    if (used.has(id)) return
+    const eligibleSlots = singleSlots.filter(s => assignments[s.index] && eligibleForSlot(players[id], s.slotType))
+    if (!eligibleSlots.length) return
+    const worst = eligibleSlots.reduce((w, s) => pointsFor(assignments[s.index]) < pointsFor(assignments[w.index]) ? s : w)
+    if (pointsFor(id) > pointsFor(assignments[worst.index])) {
+      used.delete(assignments[worst.index]) // bumped player goes back into the pool
+      assignments[worst.index] = id
+      used.add(id)
+    }
+  })
+
+  // Step 4: flex-type slots, top to bottom, from everyone still unused
+  // (leftover multi-position players, and anyone bumped in step 3).
+  const flexSlots = slots.filter(s => !s.locked && FLEX_ELIGIBLE_POSITIONS[s.slotType])
+  const remainingPool = [...singlePos, ...multiPos]
+  flexSlots.forEach(slot => {
+    const best = bestCandidate(remainingPool, slot.slotType)
+    if (best) { assignments[slot.index] = best; used.add(best) }
+  })
+
+  // Only the slots that actually changed - no point re-posting a slot to
+  // itself.
+  return slots
+    .filter(s => assignments[s.index] && assignments[s.index] !== s.currentId)
+    .map(s => ({ slotIndex: s.index, playerId: assignments[s.index] }))
+}
+
+
 function slotChipStyle(slot, overflow, extra) {
   return {
     display: 'inline-block',
@@ -151,6 +224,9 @@ export default function MyMatchup() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState(null)
+
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizeError, setOptimizeError] = useState(null)
 
   const [breakdown, setBreakdown] = useState(null)
   const [breakdownSheetOpen, setBreakdownSheetOpen] = useState(false)
@@ -309,6 +385,34 @@ export default function MyMatchup() {
       })
   }
 
+  const runOptimizeLineup = async () => {
+  const moves = computeOptimalLineup(starterSlots, editableRoster, players, pointsFor, hasActual)
+  if (!moves.length) return
+
+  setOptimizing(true)
+  setOptimizeError(null)
+  try {
+    // Sequential, not Promise.all - /set-slot reads current starters fresh
+    // from the DB on each call, so firing these in parallel could race.
+    for (const { slotIndex, playerId } of moves) {
+      const res = await fetch(`${API}/league/${leagueId}/set-slot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.user_id, week: data.week, player_id: playerId, slot_index: slotIndex }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.detail || 'Failed to move player')
+      }
+    }
+    load()
+  } catch (err) {
+    setOptimizeError(err.message)
+  } finally {
+    setOptimizing(false)
+  }
+}
+
   const closeBreakdown = () => setBreakdown(null)
 
   const openBreakdown = (playerId) => {
@@ -422,9 +526,9 @@ export default function MyMatchup() {
               >
                 <div style={{ textAlign: 'right' }}>
                   {section === 'starter' && editableSide === 'left' && (
-                    <button onClick={() => {}} style={optimizeButtonStyle}>
-                      Optimize Lineup
-                    </button>
+                <button onClick={runOptimizeLineup} disabled={optimizing} style={optimizeButtonStyle}>
+                  {optimizing ? 'Optimizing…' : 'Optimize Lineup'}
+                </button>
                   )}
                 </div>
                 <div />
@@ -434,8 +538,8 @@ export default function MyMatchup() {
                 <div />
                 <div style={{ textAlign: 'left' }}>
                   {section === 'starter' && editableSide === 'right' && (
-                    <button onClick={() => {}} style={optimizeButtonStyle}>
-                      Optimize Lineup
+                    <button onClick={runOptimizeLineup} disabled={optimizing} style={optimizeButtonStyle}>
+                      {optimizing ? 'Optimizing…' : 'Optimize Lineup'}
                     </button>
                   )}
                 </div>
