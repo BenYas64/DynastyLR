@@ -411,15 +411,34 @@ export default function MyMatchup() {
           return (
             <div key={i}>
             {showHeader && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: i === 0 ? '0 0 8px' : '20px 0 8px' }}>
-                <h3 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#666' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 55px 70px 55px 1fr',
+                  alignItems: 'center',
+                  gap: '8px',
+                  margin: i === 0 ? '0 0 8px' : '20px 0 8px',
+                }}
+              >
+                <div style={{ textAlign: 'right' }}>
+                  {section === 'starter' && editableSide === 'left' && (
+                    <button onClick={() => {}} style={optimizeButtonStyle}>
+                      Optimize Lineup
+                    </button>
+                  )}
+                </div>
+                <div />
+                <h3 style={{ margin: 0, textAlign: 'center', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#666' }}>
                   {section === 'starter' ? 'Starters' : 'Bench'}
                 </h3>
-                {section === 'starter' && editableSide &&(
-                  <button onClick={() => {}} style={optimizeButtonStyle}>
-                    Optimize Lineup
-                  </button>
-                )}
+                <div />
+                <div style={{ textAlign: 'left' }}>
+                  {section === 'starter' && editableSide === 'right' && (
+                    <button onClick={() => {}} style={optimizeButtonStyle}>
+                      Optimize Lineup
+                    </button>
+                  )}
+                </div>
               </div>
             )}
               <div
