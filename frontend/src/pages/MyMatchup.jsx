@@ -15,6 +15,17 @@ function humanizeKey(key) {
     .join(' ')
 }
 
+const optimizeButtonStyle = {
+  fontSize: '12px',
+  padding: '4px 10px',
+  borderRadius: '6px',
+  border: '1px solid #ccc',
+  background: '#fff',
+  color: '#0064a2',
+  cursor: 'pointer',
+}
+
+
 // Compact inline summary shown under each player - just enough box-score
 // context to explain the fantasy score at a glance, not the full breakdown.
 const BOX_SCORE_ORDER = [
@@ -399,11 +410,18 @@ export default function MyMatchup() {
 
           return (
             <div key={i}>
-              {showHeader && (
-                <h3 style={{ margin: i === 0 ? '0 0 8px' : '20px 0 8px', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#666' }}>
+            {showHeader && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: i === 0 ? '0 0 8px' : '20px 0 8px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#666' }}>
                   {section === 'starter' ? 'Starters' : 'Bench'}
                 </h3>
-              )}
+                {section === 'starter' && editableSide &&(
+                  <button onClick={() => {}} style={optimizeButtonStyle}>
+                    Optimize Lineup
+                  </button>
+                )}
+              </div>
+            )}
               <div
                 style={{
                   display: 'grid',
