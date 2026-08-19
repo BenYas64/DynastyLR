@@ -60,6 +60,7 @@ const FLEX_ELIGIBLE_POSITIONS = {
   SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
   WRRB_FLEX: ['WR', 'RB'],
   REC_FLEX: ['WR', 'TE'],
+  IDP_FLEX: ['DL', 'LB', 'DB'],
 }
 
 function playerPositions(player) {
