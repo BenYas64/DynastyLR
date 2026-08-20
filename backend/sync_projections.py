@@ -1,3 +1,4 @@
+import sys
 import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Projection
@@ -12,12 +13,21 @@ CURRENT_SEASON = 2026
 # reasonably sized and gives visible per-chunk progress.
 CHUNK_SIZE = 500
 
+def upcoming_week():
+    """Sleeper's own notion of the current week - same source main.py's
+    current_nfl_week() reads. Projections only mean anything once the
+    regular season is under way, so preseason/offseason map to week 1."""
+    resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
+    resp.raise_for_status()
+    state = resp.json()
+    return state.get("week") or 1 if state.get("season_type") == "regular" else 1
+
 def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
     db = SessionLocal()
     total = 0
 
     try:
-        for week in (weeks if weeks is not None else weeks_in_season(season)):
+        for week in (weeks if weeks is not None else [upcoming_week()]):
             # A transient connection drop on one week (e.g. a Supabase blip
             # mid-chunk) shouldn't abort the whole multi-minute run - retry
             # that week a couple times, then move on rather than losing every
@@ -69,4 +79,10 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
         db.close()
 
 if __name__ == "__main__":
-    sync_projections()
+    # Daily runs (cron) just need the upcoming week refreshed; --all-weeks
+    # (run weekly, e.g. Monday) rebuilds the full season - projections for
+    # already-played weeks still shift as Sleeper updates ROS estimates.
+    if "--all-weeks" in sys.argv:
+        sync_projections(weeks=weeks_in_season(CURRENT_SEASON))
+    else:
+        sync_projections()
