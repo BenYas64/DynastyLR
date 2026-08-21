@@ -13,6 +13,20 @@ CURRENT_SEASON = 2026
 # reasonably sized and gives visible per-chunk progress.
 CHUNK_SIZE = 500
 
+# Sleeper's raw projections run high on certain fields relative to how they
+# actually turn out - scale those down here so stored projections (and the
+# fantasy points computed from them) track reality more closely. Add more
+# entries as other fields turn out to need the same correction.
+FIELD_ADJUSTMENTS = {
+    "rush_fd": 0.45,
+    "rec_fd": 0.40,
+    "pass_fd": 0.40,
+}
+
+def adjust(field, value):
+    multiplier = FIELD_ADJUSTMENTS.get(field)
+    return value * multiplier if multiplier is not None and value is not None else value
+
 def upcoming_week():
     """Sleeper's own notion of the current week - same source main.py's
     current_nfl_week() reads. Projections only mean anything once the
@@ -49,7 +63,7 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
                             "season": season,
                             "week": week,
                             "season_type": season_type,
-                            **{field: p.get(field) for field in STAT_FIELDS},
+                            **{field: adjust(field, p.get(field)) for field in STAT_FIELDS},
                         }
                         for player_id, p in data.items()
                     ]
