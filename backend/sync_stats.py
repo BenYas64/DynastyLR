@@ -67,6 +67,13 @@ STAT_FIELDS = [
 def weeks_in_season(season):
     return range(1, 19) if season >= 2021 else range(1, 18)
 
+# Stat rows carry ~270 columns (len(STAT_FIELDS)+4) - an unchunked week's
+# worth of rows binds far more parameters than Postgres allows in one
+# statement (the exact ">2M bound parameters, which silently stalls" case
+# sync_projections.py's own comment warns about). Chunking at 100 rows keeps
+# each statement to ~27,000 parameters, comfortably under the 65,535 limit.
+CHUNK_SIZE = 100
+
 def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular"):
     db = SessionLocal()
     total = 0
@@ -94,13 +101,15 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
                     for player_id, s in data.items()
                 ]
 
-                stmt = insert(Stat).values(rows)
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["player_id", "season", "week", "season_type"],
-                    set_={field: stmt.excluded[field] for field in STAT_FIELDS},
-                )
-                db.execute(stmt)
-                db.commit()
+                for i in range(0, len(rows), CHUNK_SIZE):
+                    chunk = rows[i:i + CHUNK_SIZE]
+                    stmt = insert(Stat).values(chunk)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["player_id", "season", "week", "season_type"],
+                        set_={field: stmt.excluded[field] for field in STAT_FIELDS},
+                    )
+                    db.execute(stmt)
+                    db.commit()
 
                 total += len(rows)
                 print(f"{season} week {week}: {len(rows)} players")
@@ -108,7 +117,11 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
         print(f"Synced {total} stat rows")
     except Exception as e:
         db.rollback()
-        print(f"Error: {e}")
+        # See sync_projections.py - str(e) on a statement error includes the
+        # full compiled SQL and every bound parameter, which for a chunked
+        # insert is still large enough to flood a log file.
+        reason = str(e).splitlines()[0] if str(e) else repr(e)
+        print(f"Error: {type(e).__name__}: {reason}")
     finally:
         db.close()
 

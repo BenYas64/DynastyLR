@@ -11,7 +11,14 @@ CURRENT_SEASON = 2026
 # hundred) - one INSERT for all of them at once is >2M bound parameters,
 # which silently stalls rather than erroring. Chunking keeps each statement
 # reasonably sized and gives visible per-chunk progress.
-CHUNK_SIZE = 500
+#
+# Projection/Stat rows carry ~270 columns (len(STAT_FIELDS)+4), so a chunk of
+# 500 binds ~135,000 parameters in one statement - double Postgres's 65,535
+# hard limit, and even when accepted, large enough that Supabase's pooler was
+# killing it with "canceling statement due to statement timeout" more often
+# than not (seen repeatedly in production - see sync_projections.log). 100
+# rows keeps a chunk to ~27,000 parameters, comfortably inside both limits.
+CHUNK_SIZE = 100
 
 # Sleeper's raw projections run high on certain fields relative to how they
 # actually turn out - scale those down here so stored projections (and the
@@ -83,12 +90,19 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
                     break
                 except Exception as e:
                     db.rollback()
-                    print(f"{season} week {week}: attempt {attempt + 1} failed ({e})")
+                    # str(e) on a SQLAlchemy statement error includes the full
+                    # compiled SQL and every bound parameter - for a ~27,000-
+                    # parameter chunk that's a multi-hundred-KB line. The
+                    # actual error is always the first line; the rest is noise
+                    # that once blew a log file up to 145MB in six weeks.
+                    reason = str(e).splitlines()[0] if str(e) else repr(e)
+                    print(f"{season} week {week}: attempt {attempt + 1} failed ({type(e).__name__}: {reason})")
 
         print(f"Synced {total} projection rows")
     except Exception as e:
         db.rollback()
-        print(f"Error: {e}")
+        reason = str(e).splitlines()[0] if str(e) else repr(e)
+        print(f"Error: {type(e).__name__}: {reason}")
     finally:
         db.close()
 
