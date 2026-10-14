@@ -9,7 +9,19 @@ load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-engine = create_engine(DATABASE_URL)
+# No pool limits meant the long-running backend process held onto up to 15
+# connections (SQLAlchemy's defaults) indefinitely for days of uptime, with
+# nothing recycling or health-checking them - a quiet way to exhaust
+# Supabase's free-tier connection limit even with near-zero traffic. A
+# smaller cap, periodic recycling, and pre-use liveness checks keep this
+# process's footprint small and self-healing instead.
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=5,
+    pool_recycle=300,
+    pool_pre_ping=True,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
