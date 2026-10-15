@@ -74,13 +74,23 @@ def weeks_in_season(season):
 # each statement to ~27,000 parameters, comfortably under the 65,535 limit.
 CHUNK_SIZE = 100
 
-def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular"):
+def current_week():
+    """Sleeper's own notion of the current week - same source main.py's
+    current_nfl_week() and sync_projections.py's upcoming_week() read. A
+    finalized past week's stats don't change, so a routine sync only needs
+    this week, not a full-season re-fetch every run."""
+    resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
+    resp.raise_for_status()
+    state = resp.json()
+    return state.get("week") or 1 if state.get("season_type") == "regular" else 1
+
+def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular", weeks=None):
     db = SessionLocal()
     total = 0
 
     try:
         for season in range(start_season, end_season + 1):
-            for week in weeks_in_season(season):
+            for week in (weeks if weeks is not None else weeks_in_season(season)):
                 url = f"https://api.sleeper.app/v1/stats/nfl/{season_type}/{season}/{week}"
                 resp = requests.get(url, timeout=20)
                 if resp.status_code != 200:
@@ -126,4 +136,16 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
         db.close()
 
 if __name__ == "__main__":
-    sync_stats()
+    # Routine (cron) runs just need the last couple weeks refreshed. Unlike
+    # projections, current_week() is the week still being played - it has
+    # no actual stats yet - so the most recently *completed* week is
+    # current_week() - 1. Also re-checking current_week() picks up partial
+    # results as early games finish, and the prior week catches late
+    # corrections, at the cost of two cheap no-op calls once a week is
+    # fully final and unchanging.
+    #
+    # A one-off backfill across multiple seasons should call sync_stats()
+    # directly with explicit start_season/end_season and no weeks=
+    # override, e.g. sync_stats(start_season=FULL_HISTORY_START_SEASON, end_season=FULL_HISTORY_END_SEASON).
+    wk = current_week()
+    sync_stats(weeks=[w for w in (wk - 1, wk) if w >= 1])
