@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, DateTime, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -344,6 +344,15 @@ class Stat(Base):
     yds_allow_500_549 = Column(Float)
     yds_allow_550p = Column(Float)
 
+    # Season-wide aggregations (e.g. summing every player's points for a
+    # season) filter by season/season_type without constraining player_id,
+    # so they can't use the primary key's index (which leads with
+    # player_id) - that forced a full scan of this table on every cache
+    # miss, which measured at over 20 minutes once this table reached
+    # ~870k rows. This index lets those queries jump straight to the
+    # matching rows instead.
+    __table_args__ = (Index("ix_player_stats_season_season_type", "season", "season_type"),)
+
 # Same columns as Stat (built from it directly so the two schemas can never
 # drift apart), but for Sleeper's projected stats rather than actual ones -
 # kept in a separate table since projections are a moving forecast that gets
@@ -355,6 +364,9 @@ _projection_attrs = {
     "season": Column(Integer, primary_key=True),
     "week": Column(Integer, primary_key=True),
     "season_type": Column(String, primary_key=True, default="regular"),
+    # Same reasoning as Stat's index above - a season-wide aggregation here
+    # would hit the same full-scan problem as this table grows.
+    "__table_args__": (Index("ix_player_projections_season_season_type", "season", "season_type"),),
 }
 for _col in Stat.__table__.columns:
     if _col.name not in _PROJECTION_KEY_COLUMNS:
