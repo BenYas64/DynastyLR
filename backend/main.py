@@ -260,14 +260,16 @@ def get_league(league_id: str, db: Session = Depends(get_db)):
         "is_current_season": not is_superseded,
     }
 
-@app.get("/league/{league_id}/history")
-def get_league_history(league_id: str, db: Session = Depends(get_db)):
+def league_chain(db, league_id):
+    """Every League row in the same dynasty history as `league_id` - the
+    current season plus every season it rolled over from/into. Returns
+    None if league_id itself doesn't exist."""
     all_leagues = db.query(League).all()
     by_id = {l.league_id: l for l in all_leagues}
     by_prev = {l.previous_league_id: l for l in all_leagues if l.previous_league_id}
 
     if league_id not in by_id:
-        raise HTTPException(status_code=404, detail="League not found")
+        return None
 
     chain = {league_id: by_id[league_id]}
 
@@ -281,8 +283,67 @@ def get_league_history(league_id: str, db: Session = Depends(get_db)):
         cur = by_prev[cur.league_id]
         chain[cur.league_id] = cur
 
+    return chain
+
+@app.get("/league/{league_id}/history")
+def get_league_history(league_id: str, db: Session = Depends(get_db)):
+    chain = league_chain(db, league_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
     ordered = sorted(chain.values(), key=lambda l: l.season or 0, reverse=True)
     return [{"league_id": l.league_id, "season": l.season, "name": l.name} for l in ordered]
+
+@app.get("/league/{league_id}/head-to-head")
+def get_head_to_head(league_id: str, db: Session = Depends(get_db)):
+    """All-time head-to-head records between rosters, across every season in
+    this league's history - roster_id is the team identity (not owner_id),
+    since Sleeper carries roster_id over across a season rollover but a new
+    LeagueUser row gets created each season. Only counts real two-team
+    matchups with a final score - a bye week (no matchup_id) or a solo/median
+    entry (not exactly two rosters sharing a matchup_id) isn't a head-to-head
+    game and is skipped."""
+    chain = league_chain(db, league_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    matchups = db.query(Matchup).filter(Matchup.league_id.in_(chain.keys())).all()
+
+    games = {}
+    for m in matchups:
+        if m.matchup_id is None or m.points is None:
+            continue
+        key = (m.league_id, m.week, m.matchup_id)
+        games.setdefault(key, []).append(m)
+
+    records = {}
+    for group in games.values():
+        if len(group) != 2:
+            continue
+        a, b = group
+        pair_key = frozenset((a.roster_id, b.roster_id))
+        rec = records.setdefault(pair_key, {"wins": {a.roster_id: 0, b.roster_id: 0}, "total": 0})
+        rec["total"] += 1
+        if a.points > b.points:
+            rec["wins"][a.roster_id] += 1
+        elif b.points > a.points:
+            rec["wins"][b.roster_id] += 1
+
+    result = []
+    for pair_key, rec in records.items():
+        r1, r2 = tuple(pair_key)
+        wins1, wins2 = rec["wins"][r1], rec["wins"][r2]
+        if wins2 > wins1 or (wins1 == wins2 and r2 < r1):
+            r1, r2, wins1, wins2 = r2, r1, wins2, wins1
+        result.append({
+            "roster_id_1": r1,
+            "roster_id_2": r2,
+            "wins_1": wins1,
+            "wins_2": wins2,
+            "total_games": rec["total"],
+        })
+
+    return result
 
 class ScoringSettingsUpdate(BaseModel):
     user_id: str
