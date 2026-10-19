@@ -1,4 +1,5 @@
 import sys
+from datetime import date
 import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Projection
@@ -107,15 +108,21 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
         db.close()
 
 if __name__ == "__main__":
-    # Daily runs (cron) just need the upcoming week refreshed. --all-weeks
-    # (run weekly, e.g. Monday) rebuilds every remaining week's ROS estimate,
-    # not the whole season - once a week is actually played, real stats take
-    # over for it (week_points_and_projections only falls back to a
-    # projection when there's no stat row) and its projection is never read
-    # again, so rewriting all 18 weeks every run was pure waste that grew as
-    # the season went on. Confirmed as the main driver of a Supabase
-    # disk-IO-budget incident on 2026-10-19.
+    # --all-weeks is for a manual one-off rebuild only (e.g. after changing
+    # FIELD_ADJUSTMENTS) - no longer scheduled on cron. A weekly all-remaining
+    # -weeks rebuild (even excluding already-played weeks) still concentrated
+    # a multi-minute, ~100k-row write into a single day, and that one day's
+    # disk I/O was still enough to trip a Supabase budget warning on
+    # 2026-10-19 even after excluding played weeks. Spreading the same total
+    # work across every day instead - one extra remaining week per day,
+    # rotating through all of them over about a week - keeps each day's
+    # write small instead of bursty, which is what actually matters for a
+    # burst-credit-style IO budget (concentration, not total volume per se).
     if "--all-weeks" in sys.argv:
         sync_projections(weeks=range(upcoming_week(), 19))
     else:
-        sync_projections()
+        wk = upcoming_week()
+        remaining = list(range(wk, 19))
+        rotation_week = remaining[date.today().toordinal() % len(remaining)] if remaining else None
+        weeks_to_sync = sorted({wk} | ({rotation_week} if rotation_week else set()))
+        sync_projections(weeks=weeks_to_sync)
