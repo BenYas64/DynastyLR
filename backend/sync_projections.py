@@ -120,6 +120,12 @@ if __name__ == "__main__":
     # burst-credit-style IO budget (concentration, not total volume per se).
     if "--all-weeks" in sys.argv:
         sync_projections(weeks=range(upcoming_week(), 19))
+    elif "--current-week" in sys.argv:
+        # For scheduling close to each kickoff window (Thu/Sun/Mon) so a
+        # late inactive/game-day designation has a chance to be reflected
+        # before that window's games start - cheaper than the daily default
+        # on purpose, since this runs several times a day across the week.
+        sync_projections(weeks=[upcoming_week()])
     else:
         wk = upcoming_week()
         remaining = list(range(wk, 19))
