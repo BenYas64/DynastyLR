@@ -2,7 +2,7 @@ import sys
 import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Projection
-from sync_stats import STAT_FIELDS, weeks_in_season
+from sync_stats import STAT_FIELDS
 
 CURRENT_SEASON = 2026
 
@@ -107,10 +107,15 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
         db.close()
 
 if __name__ == "__main__":
-    # Daily runs (cron) just need the upcoming week refreshed; --all-weeks
-    # (run weekly, e.g. Monday) rebuilds the full season - projections for
-    # already-played weeks still shift as Sleeper updates ROS estimates.
+    # Daily runs (cron) just need the upcoming week refreshed. --all-weeks
+    # (run weekly, e.g. Monday) rebuilds every remaining week's ROS estimate,
+    # not the whole season - once a week is actually played, real stats take
+    # over for it (week_points_and_projections only falls back to a
+    # projection when there's no stat row) and its projection is never read
+    # again, so rewriting all 18 weeks every run was pure waste that grew as
+    # the season went on. Confirmed as the main driver of a Supabase
+    # disk-IO-budget incident on 2026-10-19.
     if "--all-weeks" in sys.argv:
-        sync_projections(weeks=weeks_in_season(CURRENT_SEASON))
+        sync_projections(weeks=range(upcoming_week(), 19))
     else:
         sync_projections()
