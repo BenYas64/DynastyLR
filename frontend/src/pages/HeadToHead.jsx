@@ -81,8 +81,7 @@ export default function HeadToHead() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
           <tr style={{ background: '#002676' }}>
-            <th style={{ padding: '10px', textAlign: 'left' }}>Team 1</th>
-            <th style={{ padding: '10px', textAlign: 'left' }}>Team 2</th>
+            <th style={{ padding: '10px', textAlign: 'left' }}>Teams</th>
             {COLUMNS.map(col => (
               <th
                 key={col.key}
