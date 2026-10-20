@@ -80,7 +80,7 @@ export default function HeadToHead() {
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
-          <tr style={{ background: '#f0f0f0' }}>
+          <tr style={{ background: '#002676' }}>
             <th style={{ padding: '10px', textAlign: 'left' }}>Team 1</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Team 2</th>
             {COLUMNS.map(col => (
