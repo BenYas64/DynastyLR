@@ -152,10 +152,11 @@ if __name__ == "__main__":
     # a multi-minute, ~100k-row write into a single day, and that one day's
     # disk I/O was still enough to trip a Supabase budget warning on
     # 2026-10-19 even after excluding played weeks. Spreading the same total
-    # work across every day instead - one extra remaining week per day,
-    # rotating through all of them over about a week - keeps each day's
-    # write small instead of bursty, which is what actually matters for a
-    # burst-credit-style IO budget (concentration, not total volume per se).
+    # work across every day instead, with enough extra weeks picked each
+    # day to guarantee a full cycle through all remaining weeks within 7
+    # days (see below) - keeps each day's write small instead of bursty,
+    # which is what actually matters for a burst-credit-style IO budget
+    # (concentration, not total volume per se).
     if "--all-weeks" in sys.argv:
         sync_projections(weeks=range(upcoming_week(), 19))
     elif "--current-week" in sys.argv:
@@ -176,7 +177,15 @@ if __name__ == "__main__":
         wk = upcoming_week()
         sync_projections(weeks=[wk], skip_unchanged=True)
 
-        remaining = list(range(wk, 19))
-        rotation_week = remaining[date.today().toordinal() % len(remaining)] if remaining else None
-        if rotation_week is not None and rotation_week != wk:
-            sync_projections(weeks=[rotation_week], skip_unchanged=True)
+        # One extra week per day only guaranteed full coverage within a
+        # week once <=7 weeks remained - early/mid season (e.g. 12 future
+        # weeks) it took 12 days to cycle through. Scale how many extra
+        # weeks get picked today so a full cycle always finishes within 7
+        # days regardless of how many remain, while still spreading them
+        # evenly rather than bursting.
+        future_weeks = [w for w in range(wk, 19) if w != wk]
+        if future_weeks:
+            extra_count = -(-len(future_weeks) // 7)  # ceil division
+            start = (date.today().toordinal() * extra_count) % len(future_weeks)
+            weeks_today = sorted({future_weeks[(start + i) % len(future_weeks)] for i in range(extra_count)})
+            sync_projections(weeks=weeks_today, skip_unchanged=True)
