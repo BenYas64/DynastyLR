@@ -1,5 +1,4 @@
 import sys
-from datetime import date
 import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Projection
@@ -37,10 +36,10 @@ def adjust(field, value):
 
 # Most of the ~9,400-player draftable pool is deep bench/irrelevant players
 # whose projection barely moves week to week, especially for a week that's
-# still several weeks out. skip_unchanged (used for the rotation pick - see
-# __main__) reads what's already stored first and only writes a row that's
-# new, changed teams, or moved by at least this many fantasy points -
-# turning a ~9,400-row write into a read plus a handful of actual writes.
+# still several weeks out. skip_unchanged (see __main__) reads what's
+# already stored first and only writes a row that's new, changed teams, or
+# moved by at least this many fantasy points - turning a ~9,400-row write
+# into a read plus a handful of actual writes.
 NOTICEABLE_CHANGE_THRESHOLD = 0.5
 # pts_ppr covers standard-format positions (QB/RB/WR/TE/K/DEF); pts_idp is
 # Sleeper's equivalent total for individual defensive players (tackles,
@@ -154,16 +153,14 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None, s
 
 if __name__ == "__main__":
     # --all-weeks is for a manual one-off rebuild only (e.g. after changing
-    # FIELD_ADJUSTMENTS) - no longer scheduled on cron. A weekly all-remaining
-    # -weeks rebuild (even excluding already-played weeks) still concentrated
-    # a multi-minute, ~100k-row write into a single day, and that one day's
-    # disk I/O was still enough to trip a Supabase budget warning on
-    # 2026-10-19 even after excluding played weeks. Spreading the same total
-    # work across every day instead, with enough extra weeks picked each
-    # day to guarantee a full cycle through all remaining weeks within 7
-    # days (see below) - keeps each day's write small instead of bursty,
-    # which is what actually matters for a burst-credit-style IO budget
-    # (concentration, not total volume per se).
+    # FIELD_ADJUSTMENTS) - no longer scheduled on cron. An unconditional
+    # rebuild of every remaining week (even excluding already-played weeks)
+    # was what tripped a Supabase disk-IO-budget warning on 2026-10-19 -
+    # 169k rows rewritten regardless of whether anything changed. The daily
+    # run below now checks every remaining week too, but with
+    # skip_unchanged, so the actual write volume is tiny; a rotation through
+    # a subset (tried briefly after that incident) stopped being necessary
+    # once writes scaled with real changes instead of row count.
     if "--all-weeks" in sys.argv:
         sync_projections(weeks=range(upcoming_week(), 19))
     elif "--current-week" in sys.argv:
@@ -173,26 +170,16 @@ if __name__ == "__main__":
         # on purpose, since this runs several times a day across the week.
         sync_projections(weeks=[upcoming_week()], skip_unchanged=True)
     else:
-        # skip_unchanged applies here too, not just the rotation pick below -
-        # of the ~9,400 players Sleeper returns, only ~1,700 active-roster +
-        # ~450 practice-squad players (~2,150) ever have a real non-zero
+        # skip_unchanged applies to every week here, not just wk - of the
+        # ~9,400 players Sleeper returns, only ~1,700 active-roster + ~450
+        # practice-squad players (~2,150) ever have a real non-zero
         # projection; the rest are free agents/inactive players projecting
         # ~0 every week regardless. It doesn't risk missing a real change -
         # anything that moved by >=NOTICEABLE_CHANGE_THRESHOLD, changed
         # teams, or is new still writes immediately - it only skips rows
-        # that are genuinely identical to what's already stored.
+        # that are genuinely identical to what's already stored. Since the
+        # write cost scales with actual changes rather than row count, a
+        # rotation through a subset of future weeks isn't needed anymore -
+        # just check all of them every day for maximum freshness.
         wk = upcoming_week()
-        sync_projections(weeks=[wk], skip_unchanged=True)
-
-        # One extra week per day only guaranteed full coverage within a
-        # week once <=3 weeks remained - early/mid season (e.g. 12 future
-        # weeks) it took 12 days to cycle through. Scale how many extra
-        # weeks get picked today so a full cycle always finishes within 3
-        # days regardless of how many remain, while still spreading them
-        # evenly rather than bursting.
-        future_weeks = [w for w in range(wk, 19) if w != wk]
-        if future_weeks:
-            extra_count = -(-len(future_weeks) // 3)  # ceil division
-            start = (date.today().toordinal() * extra_count) % len(future_weeks)
-            weeks_today = sorted({future_weeks[(start + i) % len(future_weeks)] for i in range(extra_count)})
-            sync_projections(weeks=weeks_today, skip_unchanged=True)
+        sync_projections(weeks=range(wk, 19), skip_unchanged=True)
