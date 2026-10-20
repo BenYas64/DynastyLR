@@ -115,6 +115,10 @@ export default function HeadToHead() {
           })}
         </tbody>
       </table>
+
+      <p style={{ marginTop: '16px', color: '#666' }}>
+        Total games: {records.reduce((sum, rec) => sum + rec.total_games, 0)}
+      </p>
     </div>
   )
 }
