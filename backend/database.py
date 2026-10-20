@@ -390,6 +390,11 @@ class League(Base):
     roster_positions = Column(String)
     playoff_week_start = Column(Integer)
     previous_league_id = Column(String)
+    # Per-league opt-in to the "median game" scoring format - a roster also
+    # wins/loses/ties against the league's weekly median score, on top of
+    # its real head-to-head matchup. Only set true for leagues that actually
+    # use this Sleeper feature, not a default for every league.
+    league_median = Column(Boolean)
 
 class Roster(Base):
     __tablename__ = "rosters"
@@ -398,6 +403,7 @@ class Roster(Base):
     owner_id = Column(String)
     wins = Column(Integer)
     losses = Column(Integer)
+    ties = Column(Integer)
     fpts = Column(Float)
     players = Column(JSONB)
     starters = Column(JSONB)

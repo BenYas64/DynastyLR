@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup
+from scoring import scoring_expression, NON_STAT_COLUMNS
 
 app = FastAPI()
 
@@ -28,8 +29,6 @@ def get_players_by_ids(ids: str, db: Session = Depends(get_db)):
         return []
     return db.query(Player).filter(Player.player_id.in_(id_list)).all()
 
-NON_STAT_COLUMNS = {"player_id", "season", "week", "season_type", "team", "opponent"}
-
 # FLEX-type roster slots don't literally match a player's fantasy_positions
 # (e.g. no player is tagged "FLEX"), so they're expanded to the positions
 # eligible to fill them.
@@ -49,23 +48,6 @@ def eligible_positions_for_roster(roster_positions):
 
 def player_to_dict(player):
     return {c.name: getattr(player, c.name) for c in Player.__table__.columns}
-
-def scoring_expression(league, model=Stat):
-    """SQL expression for a single stat (or projection) row's fantasy points: a
-    league's weighted scoring_settings if available, otherwise standard PPR."""
-    total = model.pts_ppr
-    if league and league.scoring_settings:
-        scoring_settings = json.loads(league.scoring_settings)
-        terms = [
-            func.coalesce(getattr(model, key), 0) * weight
-            for key, weight in scoring_settings.items()
-            if weight and key not in NON_STAT_COLUMNS and hasattr(model, key)
-        ]
-        if terms:
-            total = terms[0]
-            for term in terms[1:]:
-                total = total + term
-    return total
 
 CACHE_TTL_SECONDS = 3600
 _points_cache = {}
@@ -467,7 +449,7 @@ def get_rosters(league_id: str, db: Session = Depends(get_db)):
             "league_id": r.league_id,
             "players": r.players or [],
             "starters": r.starters or [],
-            "settings": {"wins": r.wins, "losses": r.losses, "fpts": r.fpts},
+            "settings": {"wins": r.wins, "losses": r.losses, "ties": r.ties, "fpts": r.fpts},
         }
         for r in rosters
     ]

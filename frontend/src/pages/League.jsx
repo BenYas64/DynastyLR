@@ -102,6 +102,13 @@ export default function League() {
 
   const isPlayoffWeek = league?.playoff_week_start > 0 && week >= league.playoff_week_start
 
+  const weekMedian = (() => {
+    const scores = matchups.map(m => m.points).filter(p => p != null).sort((a, b) => a - b)
+    if (scores.length === 0) return null
+    const mid = Math.floor(scores.length / 2)
+    return scores.length % 2 === 0 ? (scores[mid - 1] + scores[mid]) / 2 : scores[mid]
+  })()
+
   // A null matchup_id means Sleeper didn't pair this roster against anyone that
   // week (e.g. non-playoff teams during playoff weeks) - each gets its own group
   // instead of being bundled together under the same "null" key.
@@ -162,6 +169,12 @@ export default function League() {
             )}
           </div>
 
+          {league?.league_median && weekMedian != null && (
+            <p style={{ fontWeight: 'bold', marginBottom: '16px' }}>
+              League Median: {weekMedian.toFixed(2)}
+            </p>
+          )}
+
           {pairs.length === 0 ? (
             <p>No matchups found for week {week}.</p>
           ) : (
@@ -205,6 +218,7 @@ export default function League() {
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'center' }}>W</th>
             <th style={{ padding: '10px', textAlign: 'center' }}>L</th>
+            <th style={{ padding: '10px', textAlign: 'center' }}>T</th>
             <th style={{ padding: '10px', textAlign: 'center' }}>PF</th>
           </tr>
         </thead>
@@ -231,6 +245,7 @@ export default function League() {
                 </td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.wins}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.losses}</td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.ties}</td>
                 <td style={{ padding: '10px', textAlign: 'center' }}>{roster.settings.fpts}</td>
               </tr>
             )

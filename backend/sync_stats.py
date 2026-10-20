@@ -1,7 +1,8 @@
 import sys
 import requests
 from sqlalchemy.dialects.postgresql import insert
-from database import SessionLocal, Stat
+from database import SessionLocal, Stat, League
+from scoring import is_current_season, recompute_matchup_points, recompute_season_records
 
 CURRENT_SEASON = 2026
 
@@ -174,6 +175,25 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
     finally:
         db.close()
 
+def _recompute_current_leagues(week, finalize=False):
+    """After stats for `week` have been written, recompute that week's
+    Matchup.points from the new stats for every current-season league
+    (live polling and the Wednesday correction both want this). finalize
+    also rebuilds season-to-date wins/losses/ties - only appropriate after
+    an authoritative update (the Wednesday correction, or finalize_week.py),
+    not on every 5-15 min --live poll, since that would prematurely
+    "declare" results before the week is actually over."""
+    db = SessionLocal()
+    try:
+        for league in db.query(League).all():
+            if not is_current_season(db, league):
+                continue
+            recompute_matchup_points(db, league, week)
+            if finalize:
+                recompute_season_records(db, league, through_week=week)
+    finally:
+        db.close()
+
 if __name__ == "__main__":
     if "--live" in sys.argv:
         # Scheduled every 5-15 min during actual game windows (Thu/Sun/Mon
@@ -181,7 +201,9 @@ if __name__ == "__main__":
         # rather than waiting for a once-a-day run after a game is already
         # over. Wants current_week() itself (the week actually being played
         # right now), not week - 1 like --previous-week below.
-        sync_stats(weeks=[current_week()], skip_unchanged=True)
+        wk = current_week()
+        sync_stats(weeks=[wk], skip_unchanged=True)
+        _recompute_current_leagues(wk)
     elif "--previous-week" in sys.argv:
         # Scheduled Wednesday 8am - by then the NFL has published official
         # stat corrections for the week that wrapped up Monday night, which
@@ -193,6 +215,7 @@ if __name__ == "__main__":
         wk = current_week() - 1
         if wk >= 1:
             sync_stats(weeks=[wk], skip_unchanged=True)
+            _recompute_current_leagues(wk, finalize=True)
     else:
         # Manual/default: last couple weeks, full rewrite (no
         # skip_unchanged). Unlike projections, current_week() is the week
