@@ -185,14 +185,14 @@ if __name__ == "__main__":
         sync_projections(weeks=[wk], skip_unchanged=True)
 
         # One extra week per day only guaranteed full coverage within a
-        # week once <=7 weeks remained - early/mid season (e.g. 12 future
+        # week once <=3 weeks remained - early/mid season (e.g. 12 future
         # weeks) it took 12 days to cycle through. Scale how many extra
-        # weeks get picked today so a full cycle always finishes within 7
+        # weeks get picked today so a full cycle always finishes within 3
         # days regardless of how many remain, while still spreading them
         # evenly rather than bursting.
         future_weeks = [w for w in range(wk, 19) if w != wk]
         if future_weeks:
-            extra_count = -(-len(future_weeks) // 7)  # ceil division
+            extra_count = -(-len(future_weeks) // 3)  # ceil division
             start = (date.today().toordinal() * extra_count) % len(future_weeks)
             weeks_today = sorted({future_weeks[(start + i) % len(future_weeks)] for i in range(extra_count)})
             sync_projections(weeks=weeks_today, skip_unchanged=True)
