@@ -68,6 +68,23 @@ def sync_players():
 
         update_fields = [k for k in rows[0].keys() if k != "player_id"] if rows else []
 
+        # Most of the ~12,000 players' bios never change once set (name,
+        # college, birthdate, external IDs) - only a smaller set (team,
+        # injury status, depth chart, etc.) actually moves day to day.
+        # Unlike the wide 271-column Stat/Projection tables, this table is
+        # narrow enough that comparing every field directly is still a
+        # cheap read - no need for a curated subset or a magnitude
+        # threshold, just skip a row that's identical to what's stored.
+        existing = {row.player_id: row for row in db.query(Player).all()}
+
+        def changed(row):
+            old = existing.get(row["player_id"])
+            return old is None or any(row[f] != getattr(old, f) for f in update_fields)
+
+        kept = [r for r in rows if changed(r)]
+        skipped = len(rows) - len(kept)
+        rows = kept
+
         for i in range(0, len(rows), CHUNK_SIZE):
             chunk = rows[i:i + CHUNK_SIZE]
             stmt = insert(Player).values(chunk)
@@ -78,7 +95,7 @@ def sync_players():
             db.execute(stmt)
             db.commit()
 
-        print(f"Synced {len(rows)} players successfully")
+        print(f"Synced {len(rows)} players written, {skipped} unchanged skipped")
     except Exception as e:
         db.rollback()
         print(f"Error: {e}")
