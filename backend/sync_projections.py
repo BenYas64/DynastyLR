@@ -163,15 +163,20 @@ if __name__ == "__main__":
         # late inactive/game-day designation has a chance to be reflected
         # before that window's games start - cheaper than the daily default
         # on purpose, since this runs several times a day across the week.
-        sync_projections(weeks=[upcoming_week()])
+        sync_projections(weeks=[upcoming_week()], skip_unchanged=True)
     else:
+        # skip_unchanged applies here too, not just the rotation pick below -
+        # of the ~9,400 players Sleeper returns, only ~1,700 active-roster +
+        # ~450 practice-squad players (~2,150) ever have a real non-zero
+        # projection; the rest are free agents/inactive players projecting
+        # ~0 every week regardless. It doesn't risk missing a real change -
+        # anything that moved by >=NOTICEABLE_CHANGE_THRESHOLD, changed
+        # teams, or is new still writes immediately - it only skips rows
+        # that are genuinely identical to what's already stored.
         wk = upcoming_week()
-        sync_projections(weeks=[wk])
+        sync_projections(weeks=[wk], skip_unchanged=True)
 
         remaining = list(range(wk, 19))
         rotation_week = remaining[date.today().toordinal() % len(remaining)] if remaining else None
         if rotation_week is not None and rotation_week != wk:
-            # Noticeable-change filtering only makes sense here, not for wk
-            # above - the immediate upcoming week is what lineup decisions
-            # are actually made from, where even a small swing matters.
             sync_projections(weeks=[rotation_week], skip_unchanged=True)
