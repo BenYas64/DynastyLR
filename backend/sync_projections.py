@@ -35,6 +35,15 @@ def adjust(field, value):
     multiplier = FIELD_ADJUSTMENTS.get(field)
     return value * multiplier if multiplier is not None and value is not None else value
 
+# Most of the ~9,400-player draftable pool is deep bench/irrelevant players
+# whose projection barely moves week to week, especially for a week that's
+# still several weeks out. skip_unchanged (used for the rotation pick - see
+# __main__) reads what's already stored first and only writes a row that's
+# new, changed teams, or moved by at least this many fantasy points -
+# turning a ~9,400-row write into a read plus a handful of actual writes.
+NOTICEABLE_CHANGE_THRESHOLD = 0.5
+CHANGE_DETECTION_FIELDS = ("pts_ppr", "pts_half_ppr", "pts_std")
+
 def upcoming_week():
     """Sleeper's own notion of the current week - same source main.py's
     current_nfl_week() reads. Projections only mean anything once the
@@ -44,9 +53,10 @@ def upcoming_week():
     state = resp.json()
     return state.get("week") or 1 if state.get("season_type") == "regular" else 1
 
-def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
+def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None, skip_unchanged=False):
     db = SessionLocal()
     total = 0
+    total_skipped = 0
 
     try:
         for week in (weeks if weeks is not None else [upcoming_week()]):
@@ -76,6 +86,31 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
                         for player_id, p in data.items()
                     ]
 
+                    skipped = 0
+                    if skip_unchanged:
+                        existing = {
+                            row.player_id: row
+                            for row in db.query(
+                                Projection.player_id, Projection.team,
+                                *[getattr(Projection, f) for f in CHANGE_DETECTION_FIELDS],
+                            ).filter(
+                                Projection.season == season, Projection.week == week, Projection.season_type == season_type,
+                            ).all()
+                        }
+
+                        def changed(row):
+                            old = existing.get(row["player_id"])
+                            if old is None or old.team != row["team"]:
+                                return True
+                            return any(
+                                abs((row.get(f) or 0) - (getattr(old, f) or 0)) >= NOTICEABLE_CHANGE_THRESHOLD
+                                for f in CHANGE_DETECTION_FIELDS
+                            )
+
+                        kept = [r for r in rows if changed(r)]
+                        skipped = len(rows) - len(kept)
+                        rows = kept
+
                     for i in range(0, len(rows), CHUNK_SIZE):
                         chunk = rows[i:i + CHUNK_SIZE]
                         stmt = insert(Projection).values(chunk)
@@ -87,7 +122,9 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
                         db.commit()
 
                     total += len(rows)
-                    print(f"{season} week {week}: {len(rows)} players")
+                    total_skipped += skipped
+                    suffix = f", {skipped} unchanged skipped" if skip_unchanged else ""
+                    print(f"{season} week {week}: {len(rows)} players written{suffix}")
                     break
                 except Exception as e:
                     db.rollback()
@@ -99,7 +136,8 @@ def sync_projections(season=CURRENT_SEASON, season_type="regular", weeks=None):
                     reason = str(e).splitlines()[0] if str(e) else repr(e)
                     print(f"{season} week {week}: attempt {attempt + 1} failed ({type(e).__name__}: {reason})")
 
-        print(f"Synced {total} projection rows")
+        skip_suffix = f" ({total_skipped} unchanged skipped)" if skip_unchanged else ""
+        print(f"Synced {total} projection rows{skip_suffix}")
     except Exception as e:
         db.rollback()
         reason = str(e).splitlines()[0] if str(e) else repr(e)
@@ -128,7 +166,12 @@ if __name__ == "__main__":
         sync_projections(weeks=[upcoming_week()])
     else:
         wk = upcoming_week()
+        sync_projections(weeks=[wk])
+
         remaining = list(range(wk, 19))
         rotation_week = remaining[date.today().toordinal() % len(remaining)] if remaining else None
-        weeks_to_sync = sorted({wk} | ({rotation_week} if rotation_week else set()))
-        sync_projections(weeks=weeks_to_sync)
+        if rotation_week is not None and rotation_week != wk:
+            # Noticeable-change filtering only makes sense here, not for wk
+            # above - the immediate upcoming week is what lineup decisions
+            # are actually made from, where even a small swing matters.
+            sync_projections(weeks=[rotation_week], skip_unchanged=True)
