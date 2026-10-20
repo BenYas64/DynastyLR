@@ -4,9 +4,21 @@ import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
 
+function pct(value) {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function pts(value) {
+  return value.toFixed(2)
+}
+
 const COLUMNS = [
   { key: 'wins_1', label: 'Team 1 Wins' },
   { key: 'wins_2', label: 'Team 2 Wins' },
+  { key: 'win_pct_1', label: 'Team 1 Win %', format: pct },
+  { key: 'win_pct_2', label: 'Team 2 Win %', format: pct },
+  { key: 'avg_points_1', label: 'Team 1 Avg Pts', format: pts },
+  { key: 'avg_points_2', label: 'Team 2 Avg Pts', format: pts },
   { key: 'total_games', label: 'Total Games' },
 ]
 
@@ -59,7 +71,23 @@ export default function HeadToHead() {
     return { name: roster ? teamName(user) : `Roster ${rosterId}`, avatar: teamAvatarUrl(user) }
   }
 
-  const sorted = [...records].sort((a, b) => {
+  const rows = records.map(rec => {
+    const games = rec.total_games
+    return {
+      ...rec,
+      win_pct_1: games ? rec.wins_1 / games : 0,
+      win_pct_2: games ? rec.wins_2 / games : 0,
+      avg_points_1: games ? rec.points_1 / games : 0,
+      avg_points_2: games ? rec.points_2 / games : 0,
+    }
+  })
+
+  const totalGames = records.reduce((sum, rec) => sum + rec.total_games, 0)
+  const totalPoints = records.reduce((sum, rec) => sum + rec.points_1 + rec.points_2, 0)
+  // Each game has two team scores, so the per-team average divides by 2x games.
+  const leagueAvg = totalGames ? totalPoints / (totalGames * 2) : 0
+
+  const sorted = [...rows].sort((a, b) => {
     const diff = a[sortKey] - b[sortKey]
     return sortDir === 'desc' ? -diff : diff
   })
@@ -76,12 +104,12 @@ export default function HeadToHead() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Head-to-Head Records</h2>
-      <p style={{ color: '#666' }}>All-time regular-season matchup results between every pair of teams in this league's history.</p>
+      <p style={{ color: '#666' }}>All-time regular season and playoff matchup results between every pair of ROSTERS in this league's history.</p>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
           <tr style={{ background: '#002676' }}>
-            <th style={{ padding: '10px', textAlign: 'left' }}>Teams</th>
+            <th colSpan={2} style={{ padding: '10px', textAlign: 'left' }}>Teams</th>
             {COLUMNS.map(col => (
               <th
                 key={col.key}
@@ -99,17 +127,23 @@ export default function HeadToHead() {
             const team2 = teamFor(rec.roster_id_2)
             return (
               <tr key={i} style={{ borderBottom: '1px solid #ddd' }}>
-                <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {team1.avatar && <img src={team1.avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />}
-                  {team1.name}
+                <td style={{ padding: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {team1.avatar && <img src={team1.avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />}
+                    {team1.name}
+                  </div>
                 </td>
-                <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {team2.avatar && <img src={team2.avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />}
-                  {team2.name}
+                <td style={{ padding: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {team2.avatar && <img src={team2.avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />}
+                    {team2.name}
+                  </div>
                 </td>
-                <td style={{ padding: '10px', textAlign: 'center' }}>{rec.wins_1}</td>
-                <td style={{ padding: '10px', textAlign: 'center' }}>{rec.wins_2}</td>
-                <td style={{ padding: '10px', textAlign: 'center' }}>{rec.total_games}</td>
+                {COLUMNS.map(col => (
+                  <td key={col.key} style={{ padding: '10px', textAlign: 'center' }}>
+                    {col.format ? col.format(rec[col.key]) : rec[col.key]}
+                  </td>
+                ))}
               </tr>
             )
           })}
@@ -117,7 +151,10 @@ export default function HeadToHead() {
       </table>
 
       <p style={{ marginTop: '16px', color: '#666' }}>
-        Total games: {records.reduce((sum, rec) => sum + rec.total_games, 0)}
+        Total games: {totalGames}
+      </p>
+      <p style={{ color: '#666' }}>
+        All-time league average score: {pts(leagueAvg)}
       </p>
     </div>
   )

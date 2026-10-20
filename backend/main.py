@@ -304,9 +304,15 @@ def get_head_to_head(league_id: str, db: Session = Depends(get_db)):
             continue
         a, b = group
         pair_key = frozenset((a.roster_id, b.roster_id))
-        rec = records.setdefault(pair_key, {"wins": {a.roster_id: 0, b.roster_id: 0}, "total": 0})
+        rec = records.setdefault(pair_key, {
+            "wins": {a.roster_id: 0, b.roster_id: 0},
+            "points": {a.roster_id: 0.0, b.roster_id: 0.0},
+            "total": 0,
+        })
         if a.points > 0 and b.points > 0:
             rec["total"] += 1
+            rec["points"][a.roster_id] += a.points
+            rec["points"][b.roster_id] += b.points
         if a.points > b.points:
             rec["wins"][a.roster_id] += 1
         elif b.points > a.points:
@@ -323,6 +329,8 @@ def get_head_to_head(league_id: str, db: Session = Depends(get_db)):
             "roster_id_2": r2,
             "wins_1": wins1,
             "wins_2": wins2,
+            "points_1": round(rec["points"][r1], 2),
+            "points_2": round(rec["points"][r2], 2),
             "total_games": rec["total"],
         })
 
