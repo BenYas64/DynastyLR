@@ -1,3 +1,4 @@
+import sys
 import requests
 from sqlalchemy.dialects.postgresql import insert
 from database import SessionLocal, Stat
@@ -74,6 +75,15 @@ def weeks_in_season(season):
 # each statement to ~27,000 parameters, comfortably under the 65,535 limit.
 CHUNK_SIZE = 100
 
+# Same change-detection pattern as sync_projections.py, used for --live (see
+# __main__): during an active game window most of a week's ~2,200 real
+# stat lines ARE genuinely moving, but plenty aren't yet (a game that
+# hasn't kicked off in a later Sunday window) or ever will (inactive/DNP) -
+# only writing a row that's new, changed teams, or moved by this many
+# fantasy points still avoids a blind full rewrite on every 5-15 min poll.
+NOTICEABLE_CHANGE_THRESHOLD = 0.5
+CHANGE_DETECTION_FIELDS = ("pts_ppr", "pts_idp")
+
 def current_week():
     """Sleeper's own notion of the current week - same source main.py's
     current_nfl_week() and sync_projections.py's upcoming_week() read. A
@@ -84,9 +94,10 @@ def current_week():
     state = resp.json()
     return state.get("week") or 1 if state.get("season_type") == "regular" else 1
 
-def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular", weeks=None):
+def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_type="regular", weeks=None, skip_unchanged=False):
     db = SessionLocal()
     total = 0
+    total_skipped = 0
 
     try:
         for season in range(start_season, end_season + 1):
@@ -111,6 +122,31 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
                     for player_id, s in data.items()
                 ]
 
+                skipped = 0
+                if skip_unchanged:
+                    existing = {
+                        row.player_id: row
+                        for row in db.query(
+                            Stat.player_id, Stat.team,
+                            *[getattr(Stat, f) for f in CHANGE_DETECTION_FIELDS],
+                        ).filter(
+                            Stat.season == season, Stat.week == week, Stat.season_type == season_type,
+                        ).all()
+                    }
+
+                    def changed(row):
+                        old = existing.get(row["player_id"])
+                        if old is None or old.team != row["team"]:
+                            return True
+                        return any(
+                            abs((row.get(f) or 0) - (getattr(old, f) or 0)) >= NOTICEABLE_CHANGE_THRESHOLD
+                            for f in CHANGE_DETECTION_FIELDS
+                        )
+
+                    kept = [r for r in rows if changed(r)]
+                    skipped = len(rows) - len(kept)
+                    rows = kept
+
                 for i in range(0, len(rows), CHUNK_SIZE):
                     chunk = rows[i:i + CHUNK_SIZE]
                     stmt = insert(Stat).values(chunk)
@@ -122,9 +158,12 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
                     db.commit()
 
                 total += len(rows)
-                print(f"{season} week {week}: {len(rows)} players")
+                total_skipped += skipped
+                suffix = f", {skipped} unchanged skipped" if skip_unchanged else ""
+                print(f"{season} week {week}: {len(rows)} players written{suffix}")
 
-        print(f"Synced {total} stat rows")
+        skip_suffix = f" ({total_skipped} unchanged skipped)" if skip_unchanged else ""
+        print(f"Synced {total} stat rows{skip_suffix}")
     except Exception as e:
         db.rollback()
         # See sync_projections.py - str(e) on a statement error includes the
@@ -136,16 +175,24 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
         db.close()
 
 if __name__ == "__main__":
-    # Routine (cron) runs just need the last couple weeks refreshed. Unlike
-    # projections, current_week() is the week still being played - it has
-    # no actual stats yet - so the most recently *completed* week is
-    # current_week() - 1. Also re-checking current_week() picks up partial
-    # results as early games finish, and the prior week catches late
-    # corrections, at the cost of two cheap no-op calls once a week is
-    # fully final and unchanging.
-    #
-    # A one-off backfill across multiple seasons should call sync_stats()
-    # directly with explicit start_season/end_season and no weeks=
-    # override, e.g. sync_stats(start_season=FULL_HISTORY_START_SEASON, end_season=FULL_HISTORY_END_SEASON).
-    wk = current_week()
-    sync_stats(weeks=[w for w in (wk - 1, wk) if w >= 1])
+    if "--live" in sys.argv:
+        # Scheduled every 5-15 min during actual game windows (Sunday
+        # afternoon/evening, Thursday night) to catch score changes as they
+        # happen, rather than waiting for the once-a-day run after a game is
+        # already over. Unlike the daily run below, this wants current_week()
+        # itself (the week actually being played right now), not week - 1.
+        sync_stats(weeks=[current_week()], skip_unchanged=True)
+    else:
+        # Routine (cron) runs just need the last couple weeks refreshed. Unlike
+        # projections, current_week() is the week still being played - it has
+        # no actual stats yet - so the most recently *completed* week is
+        # current_week() - 1. Also re-checking current_week() picks up partial
+        # results as early games finish, and the prior week catches late
+        # corrections, at the cost of two cheap no-op calls once a week is
+        # fully final and unchanging.
+        #
+        # A one-off backfill across multiple seasons should call sync_stats()
+        # directly with explicit start_season/end_season and no weeks=
+        # override, e.g. sync_stats(start_season=FULL_HISTORY_START_SEASON, end_season=FULL_HISTORY_END_SEASON).
+        wk = current_week()
+        sync_stats(weeks=[w for w in (wk - 1, wk) if w >= 1])
