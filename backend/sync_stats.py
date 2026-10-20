@@ -176,20 +176,28 @@ def sync_stats(start_season=CURRENT_SEASON, end_season=CURRENT_SEASON, season_ty
 
 if __name__ == "__main__":
     if "--live" in sys.argv:
-        # Scheduled every 5-15 min during actual game windows (Sunday
-        # afternoon/evening, Thursday night) to catch score changes as they
-        # happen, rather than waiting for the once-a-day run after a game is
-        # already over. Unlike the daily run below, this wants current_week()
-        # itself (the week actually being played right now), not week - 1.
+        # Scheduled every 5-15 min during actual game windows (Thu/Sun/Mon
+        # night, Sunday afternoon) to catch score changes as they happen,
+        # rather than waiting for a once-a-day run after a game is already
+        # over. Wants current_week() itself (the week actually being played
+        # right now), not week - 1 like --previous-week below.
         sync_stats(weeks=[current_week()], skip_unchanged=True)
+    elif "--previous-week" in sys.argv:
+        # Scheduled Wednesday 8am - by then the NFL has published official
+        # stat corrections for the week that wrapped up Monday night, which
+        # --live polling during the games themselves wouldn't have caught
+        # (those were still in-progress, unofficial numbers). Replaces the
+        # old daily 6:10am run for this purpose - live polling during games
+        # plus this one targeted check covers what re-checking every single
+        # morning was doing, without the extra 6 unnecessary days of it.
+        wk = current_week() - 1
+        if wk >= 1:
+            sync_stats(weeks=[wk], skip_unchanged=True)
     else:
-        # Routine (cron) runs just need the last couple weeks refreshed. Unlike
-        # projections, current_week() is the week still being played - it has
-        # no actual stats yet - so the most recently *completed* week is
-        # current_week() - 1. Also re-checking current_week() picks up partial
-        # results as early games finish, and the prior week catches late
-        # corrections, at the cost of two cheap no-op calls once a week is
-        # fully final and unchanging.
+        # Manual/default: last couple weeks, full rewrite (no
+        # skip_unchanged). Unlike projections, current_week() is the week
+        # still being played - it has no actual stats yet - so the most
+        # recently *completed* week is current_week() - 1.
         #
         # A one-off backfill across multiple seasons should call sync_stats()
         # directly with explicit start_season/end_season and no weeks=
