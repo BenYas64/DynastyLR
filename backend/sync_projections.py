@@ -42,7 +42,14 @@ def adjust(field, value):
 # new, changed teams, or moved by at least this many fantasy points -
 # turning a ~9,400-row write into a read plus a handful of actual writes.
 NOTICEABLE_CHANGE_THRESHOLD = 0.5
-CHANGE_DETECTION_FIELDS = ("pts_ppr", "pts_half_ppr", "pts_std")
+# pts_ppr covers standard-format positions (QB/RB/WR/TE/K/DEF); pts_idp is
+# Sleeper's equivalent total for individual defensive players (tackles,
+# sacks, etc.), which pts_ppr doesn't include - without it, IDP players'
+# changes would be invisible to this check and their rows would never get
+# refreshed. pts_half_ppr/pts_std are deliberately not checked separately -
+# they're derived from the same underlying stats as pts_ppr, so in practice
+# nothing moves one without moving the others too.
+CHANGE_DETECTION_FIELDS = ("pts_ppr", "pts_idp")
 
 def upcoming_week():
     """Sleeper's own notion of the current week - same source main.py's
