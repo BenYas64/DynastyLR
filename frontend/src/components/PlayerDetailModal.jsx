@@ -55,6 +55,8 @@ export default function PlayerDetailModal() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [player, setPlayer] = useState(null)
   const [stats, setStats] = useState([])
+  const [redraftValue, setRedraftValue] = useState(null)
+  const [redraftPositionRank, setRedraftPositionRank] = useState(null)
   const [dynastyValue, setDynastyValue] = useState(null)
   const [dynastyPositionRank, setDynastyPositionRank] = useState(null)
   const [expandedSeason, setExpandedSeason] = useState(null)
@@ -99,6 +101,8 @@ export default function PlayerDetailModal() {
       .then(data => {
         setPlayer(data.player)
         setStats(data.stats || [])
+        setRedraftValue(data.redraft_value)
+        setRedraftPositionRank(data.redraft_position_rank)
         setDynastyValue(data.dynasty_value)
         setDynastyPositionRank(data.dynasty_position_rank)
         setLoading(false)
@@ -229,6 +233,8 @@ export default function PlayerDetailModal() {
   const fields = player ? [
     ['Team', player.team || 'FA'],
     ['Position', player.position],
+    ['Redraft Value', redraftValue],
+    ['Redraft Position Rank', redraftPositionRank != null ? `${player.position}${redraftPositionRank}` : null],
     ['Dynasty Value', dynastyValue],
     ['Dynasty Position Rank', dynastyPositionRank != null ? `${player.position}${dynastyPositionRank}` : null],
     ['Age', player.age],

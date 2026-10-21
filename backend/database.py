@@ -402,6 +402,10 @@ class League(Base):
     # any other league setting.
     value_ppr = Column(Float)
     value_tep = Column(Float)
+    # "redraft" or "dynasty" - which value(s) get shown for this league's
+    # players. Redraft value always shows regardless of this; dynasty value
+    # only shows additionally when this is "dynasty".
+    league_type = Column(String)
 
 class Roster(Base):
     __tablename__ = "rosters"

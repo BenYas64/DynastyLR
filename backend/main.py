@@ -159,22 +159,30 @@ def get_player(player_id: str, league_id: str | None = None, db: Session = Depen
     # Which of the 18 FantasyCalc slices (see player_values) to show -
     # the calling league's own value_ppr/value_tep if it has one set, else
     # a reasonable default (half-PPR, no TEP) so this still works without
-    # a league in context.
+    # a league in context. Redraft always shows; dynasty only shows
+    # additionally when the league is actually a dynasty league.
     league = db.query(League).filter(League.league_id == league_id).first() if league_id else None
     value_ppr = league.value_ppr if league and league.value_ppr is not None else 0.5
     value_tep = league.value_tep if league and league.value_tep is not None else 0.0
 
-    value = db.query(PlayerValue).filter(
-        PlayerValue.player_id == player_id,
-        PlayerValue.is_dynasty == True,
-        PlayerValue.ppr == value_ppr,
-        PlayerValue.tep == value_tep,
-    ).first()
+    def value_for(is_dynasty):
+        return db.query(PlayerValue).filter(
+            PlayerValue.player_id == player_id,
+            PlayerValue.is_dynasty == is_dynasty,
+            PlayerValue.ppr == value_ppr,
+            PlayerValue.tep == value_tep,
+        ).first()
+
+    redraft = value_for(False)
+    dynasty = value_for(True) if league and league.league_type == "dynasty" else None
+
     return {
         "player": player,
         "stats": stats,
-        "dynasty_value": value.value if value else None,
-        "dynasty_position_rank": value.position_rank if value else None,
+        "redraft_value": redraft.value if redraft else None,
+        "redraft_position_rank": redraft.position_rank if redraft else None,
+        "dynasty_value": dynasty.value if dynasty else None,
+        "dynasty_position_rank": dynasty.position_rank if dynasty else None,
     }
 
 @app.get("/league/{league_id}/players/{player_id}/weekly-rank/{season}")
@@ -390,10 +398,13 @@ def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: 
 
 VALUE_TIERS = (0, 0.5, 1.0)
 
+LEAGUE_TYPES = ("redraft", "dynasty")
+
 class ValueSettingsUpdate(BaseModel):
     user_id: str
     value_ppr: float
     value_tep: float
+    league_type: str
 
 @app.put("/league/{league_id}/value-settings")
 def update_value_settings(league_id: str, payload: ValueSettingsUpdate, db: Session = Depends(get_db)):
@@ -418,12 +429,20 @@ def update_value_settings(league_id: str, payload: ValueSettingsUpdate, db: Sess
 
     if payload.value_ppr not in VALUE_TIERS or payload.value_tep not in VALUE_TIERS:
         raise HTTPException(status_code=400, detail="value_ppr and value_tep must each be 0, 0.5, or 1")
+    if payload.league_type not in LEAGUE_TYPES:
+        raise HTTPException(status_code=400, detail="league_type must be 'redraft' or 'dynasty'")
 
     league.value_ppr = payload.value_ppr
     league.value_tep = payload.value_tep
+    league.league_type = payload.league_type
     db.commit()
 
-    return {"league_id": league_id, "value_ppr": league.value_ppr, "value_tep": league.value_tep}
+    return {
+        "league_id": league_id,
+        "value_ppr": league.value_ppr,
+        "value_tep": league.value_tep,
+        "league_type": league.league_type,
+    }
 
 # Canonical slot order the roster-positions editor writes back in. BN entries
 # can sit anywhere in the array without affecting starter-slot indexing (slot

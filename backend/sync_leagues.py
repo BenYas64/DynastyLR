@@ -18,6 +18,9 @@ VALUE_TIERS = [0, 0.5, 1.0]
 def nearest_value_tier(weight):
     return min(VALUE_TIERS, key=lambda t: abs((weight or 0) - t))
 
+def default_league_type(name):
+    return "dynasty" if "wcxc" in (name or "").lower() else "redraft"
+
 def discover_leagues(season, user_id=BEN_USER_ID):
     """Adds any of this user's leagues for `season` that aren't in the
     leagues table yet - a season rollover or a brand new league both show up
@@ -55,6 +58,7 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 league_median=False,
                 value_ppr=nearest_value_tier(scoring.get("rec")),
                 value_tep=nearest_value_tier(scoring.get("bonus_rec_te")),
+                league_type=default_league_type(data.get("name")),
             ))
             db.commit()
             added += 1
@@ -91,6 +95,8 @@ def sync_leagues():
                 league.value_ppr = nearest_value_tier(scoring.get("rec"))
             if league.value_tep is None:
                 league.value_tep = nearest_value_tier(scoring.get("bonus_rec_te"))
+            if league.league_type is None:
+                league.league_type = default_league_type(data.get("name"))
             db.commit()
             print(f"{league_id}: {data.get('name')} updated")
 
