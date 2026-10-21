@@ -240,7 +240,7 @@ export default function Draft() {
                   key={pick.pick_no}
                   style={{ display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #ddd', borderRadius: '6px', padding: '8px 12px' }}
                 >
-                  <span style={{ color: '#666', width: '36px' }}>{pick.pick_no}.</span>
+                  <span style={{ color: '#fff9f9', width: '36px' }}>{pick.pick_no}.</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '180px' }}>
                     {team.avatar && <img src={team.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />}
                     <span>{team.name}</span>
@@ -266,7 +266,7 @@ export default function Draft() {
                           <span
                             key={season}
                             title={total != null ? `${total.toFixed(1)} PAR over ${weeksCompleted} weeks, ${season}` : `Points above replacement, ${season}`}
-                            style={{ color: '#666', fontSize: '13px', minWidth: '65px', textAlign: 'right', background, padding: background ? '2px 6px' : 0, borderRadius: '4px' }}
+                            style={{ color: '#ffffff', fontSize: '13px', minWidth: '65px', textAlign: 'right', background, padding: background ? '2px 6px' : 0, borderRadius: '4px' }}
                           >
                             PAR '{String(season).slice(2)}: {total != null ? total.toFixed(1) : '-'}
                           </span>
