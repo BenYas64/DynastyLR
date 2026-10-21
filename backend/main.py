@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup
+from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick
 from scoring import scoring_expression, NON_STAT_COLUMNS
 
 app = FastAPI()
@@ -848,6 +848,32 @@ def get_bracket(league_id: str, bracket_type: str, db: Session = Depends(get_db)
             "loser_roster_id": m.loser_roster_id,
         }
         for m in rows
+    ]
+
+@app.get("/league/{league_id}/draft")
+def get_draft(league_id: str, db: Session = Depends(get_db)):
+    """Every pick from every draft this league has had (a league can have
+    more than one - e.g. a startup draft plus a separate annual rookie
+    draft), ordered so a multi-draft league's picks still read in a sane
+    order: oldest draft first, then pick number within it."""
+    rows = (
+        db.query(DraftPick)
+        .filter(DraftPick.league_id == league_id)
+        .order_by(DraftPick.draft_id, DraftPick.pick_no)
+        .all()
+    )
+    return [
+        {
+            "draft_id": p.draft_id,
+            "pick_no": p.pick_no,
+            "round": p.round,
+            "draft_slot": p.draft_slot,
+            "roster_id": p.roster_id,
+            "picked_by": p.picked_by,
+            "player_id": p.player_id,
+            "is_keeper": p.is_keeper,
+        }
+        for p in rows
     ]
 
 @app.get("/league/{league_id}/users")

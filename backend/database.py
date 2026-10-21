@@ -438,6 +438,18 @@ class BracketMatchup(Base):
     winner_roster_id = Column(Integer)
     loser_roster_id = Column(Integer)
 
+class DraftPick(Base):
+    __tablename__ = "draft_picks"
+    league_id = Column(String, primary_key=True)
+    draft_id = Column(String, primary_key=True)
+    pick_no = Column(Integer, primary_key=True)
+    round = Column(Integer)
+    draft_slot = Column(Integer)
+    roster_id = Column(Integer)
+    picked_by = Column(String)
+    player_id = Column(String)
+    is_keeper = Column(Boolean)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
