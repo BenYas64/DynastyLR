@@ -8,6 +8,8 @@ const API = 'https://api.dynastylr.site'
 export default function Draft() {
   const { selectedLeagueId } = useAccount()
   const { openPlayer } = usePlayerModal()
+  const [history, setHistory] = useState([])
+  const [targetLeagueId, setTargetLeagueId] = useState(null)
   const [picks, setPicks] = useState([])
   const [rosters, setRosters] = useState([])
   const [users, setUsers] = useState({})
@@ -15,14 +17,26 @@ export default function Draft() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // Every season this league has had a draft in - lets the year dropdown
+  // switch to a past season's own league_id, since rosters/ownership/draft
+  // data are all scoped per-season just like everywhere else in the app.
   useEffect(() => {
     if (!selectedLeagueId) return
+    setTargetLeagueId(selectedLeagueId)
+    fetch(`${API}/league/${selectedLeagueId}/history`)
+      .then(r => r.json())
+      .then(setHistory)
+      .catch(() => setHistory([]))
+  }, [selectedLeagueId])
+
+  useEffect(() => {
+    if (!targetLeagueId) return
     setLoading(true)
     setError(null)
     Promise.all([
-      fetch(`${API}/league/${selectedLeagueId}/draft`).then(r => r.json()),
-      fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
-      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json()),
+      fetch(`${API}/league/${targetLeagueId}/draft`).then(r => r.json()),
+      fetch(`${API}/league/${targetLeagueId}/rosters`).then(r => r.json()),
+      fetch(`${API}/league/${targetLeagueId}/users`).then(r => r.json()),
     ]).then(([picksData, rostersData, usersData]) => {
       const userMap = {}
       usersData.forEach(u => userMap[u.user_id] = u)
@@ -48,16 +62,27 @@ export default function Draft() {
       setError(err.message)
       setLoading(false)
     })
-  }, [selectedLeagueId])
+  }, [targetLeagueId])
 
   if (!selectedLeagueId) return (
     <p style={{ padding: '20px' }}>
       Sign in and select a league on the Account page to view draft results.
     </p>
   )
-  if (loading) return <p style={{ padding: '20px' }}>Loading draft...</p>
-  if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
-  if (picks.length === 0) return <p style={{ padding: '20px' }}>No draft results found for this league.</p>
+
+  const yearSelect = history.length > 1 && (
+    <select
+      value={targetLeagueId || ''}
+      onChange={e => setTargetLeagueId(e.target.value)}
+      style={{ padding: '8px', fontSize: '16px', marginBottom: '20px' }}
+    >
+      {history.map(h => <option key={h.league_id} value={h.league_id}>{h.season}</option>)}
+    </select>
+  )
+
+  if (loading) return <div style={{ padding: '20px' }}>{yearSelect}<p>Loading draft...</p></div>
+  if (error) return <div style={{ padding: '20px' }}>{yearSelect}<p style={{ color: 'red' }}>Error: {error}</p></div>
+  if (picks.length === 0) return <div style={{ padding: '20px' }}>{yearSelect}<p>No draft results found for this season.</p></div>
 
   const rosterMap = {}
   rosters.forEach(r => { rosterMap[r.roster_id] = r })
@@ -81,6 +106,7 @@ export default function Draft() {
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Draft Results</h2>
+      {yearSelect}
 
       {Object.entries(byDraft).map(([draftId, draftPicks]) => {
         const rounds = draftPicks.reduce((max, p) => Math.max(max, p.round || 0), 0)
