@@ -34,7 +34,7 @@ FLEX_SPLITS = {
     "FLEX": {"RB": 0.45, "WR": 0.45, "TE": 0.10},
     "WRRB_FLEX": {"RB": 0.55, "WR": 0.45},
     "REC_FLEX": {"WR": 0.85, "TE": 0.15},
-    "SUPER_FLEX": {"QB": 0.75, "RB": 0.15, "WR": 0.08, "TE": 0.02},
+    "SUPER_FLEX": {"QB": 0.95, "RB": 0.03, "WR": 0.015, "TE": 0.005},
 }
 
 def replacement_starter_counts(league):
