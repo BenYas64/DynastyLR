@@ -64,6 +64,7 @@ export default function PlayerDetailModal() {
   const [error, setError] = useState(null)
   const [selectedLeague, setSelectedLeague] = useState(null)
   const [weeklyRanks, setWeeklyRanks] = useState({})
+  const [weeklyPar, setWeeklyPar] = useState({})
   const [owningRoster, setOwningRoster] = useState(null)
   const [owningUser, setOwningUser] = useState(null)
   const [cutting, setCutting] = useState(false)
@@ -126,6 +127,7 @@ export default function PlayerDetailModal() {
 
   useEffect(() => {
     setWeeklyRanks({})
+    setWeeklyPar({})
   }, [selectedLeagueId, playerId])
 
   const loadRosterOwner = () => {
@@ -195,14 +197,6 @@ export default function PlayerDetailModal() {
       })
   }
 
-  useEffect(() => {
-    if (!selectedLeagueId || !playerId || expandedSeason == null || weeklyRanks[expandedSeason]) return
-    fetch(`${API}/league/${selectedLeagueId}/players/${playerId}/weekly-rank/${expandedSeason}`)
-      .then(r => r.json())
-      .then(ranks => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: ranks })))
-      .catch(() => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: {} })))
-  }, [selectedLeagueId, expandedSeason, playerId, weeklyRanks])
-
   const scoringSettings = useMemo(() => {
     if (!selectedLeague?.scoring_settings) return null
     try {
@@ -228,6 +222,35 @@ export default function PlayerDetailModal() {
     return Object.values(bySeason).sort((a, b) => b.season - a.season)
   }, [stats, scoringSettings])
 
+  // Rookie season gating for PAR fetches below, computed up front (not just
+  // at render time) since player.years_exp is known as soon as player loads.
+  const earliestSeason = !player || player.years_exp == null
+    ? null
+    : CURRENT_SEASON - Math.max(player.years_exp - 1, 0)
+
+  useEffect(() => {
+    if (!selectedLeagueId || !playerId || expandedSeason == null || weeklyRanks[expandedSeason]) return
+    fetch(`${API}/league/${selectedLeagueId}/players/${playerId}/weekly-rank/${expandedSeason}`)
+      .then(r => r.json())
+      .then(ranks => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: ranks })))
+      .catch(() => setWeeklyRanks(prev => ({ ...prev, [expandedSeason]: {} })))
+  }, [selectedLeagueId, expandedSeason, playerId, weeklyRanks])
+
+  // Fetched eagerly for every season (not just the expanded one, unlike
+  // weeklyRanks) since the collapsed season row shows a PAR total that
+  // needs every week's value up front, not only once a season is expanded.
+  useEffect(() => {
+    if (!selectedLeagueId || !playerId) return
+    seasonTotals.forEach(t => {
+      if (earliestSeason != null && t.season < earliestSeason) return
+      if (weeklyPar[t.season]) return
+      fetch(`${API}/league/${selectedLeagueId}/players/${playerId}/points-above-replacement/${t.season}`)
+        .then(r => r.json())
+        .then(par => setWeeklyPar(prev => ({ ...prev, [t.season]: par })))
+        .catch(() => setWeeklyPar(prev => ({ ...prev, [t.season]: {} })))
+    })
+  }, [selectedLeagueId, playerId, seasonTotals, earliestSeason, weeklyPar])
+
   if (!playerId) return null
 
   const fields = player ? [
@@ -251,12 +274,15 @@ export default function PlayerDetailModal() {
     ['Depth Chart', player.depth_chart_position ? `${player.depth_chart_position} #${player.depth_chart_order ?? ''}` : null],
   ].filter(([, value]) => value !== null && value !== undefined && value !== '') : []
 
-  const earliestSeason = !player || player.years_exp == null
-    ? null
-    : CURRENT_SEASON - Math.max(player.years_exp - 1, 0)
   const visibleSeasonTotals = earliestSeason == null
     ? seasonTotals
     : seasonTotals.filter(t => t.season >= earliestSeason)
+
+  // PAR needs a league in context (roster construction + scoring), but
+  // unlike Fantasy Pts it doesn't need custom scoring_settings specifically -
+  // scoring_expression already falls back to standard PPR on its own.
+  const showPar = !!selectedLeagueId
+  const seasonParTotal = season => Object.values(weeklyPar[season] || {}).reduce((sum, v) => sum + v, 0)
 
   return (
     <>
@@ -399,6 +425,7 @@ export default function PlayerDetailModal() {
                     <tr style={{ background: '#242444' }}>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Season</th>
                       <th style={{ padding: '8px', textAlign: 'left' }}>Fantasy Pts</th>
+                      <th style={{ padding: '8px', textAlign: 'left' }} title="Points above the estimated replacement-level player at this position">PAR</th>
                       {SUM_KEYS.map(key => {
                         const label = WEEK_COLUMNS.find(([k]) => k === key)[1]
                         return <th key={key} style={{ padding: '8px', textAlign: 'left' }}>{label}</th>
@@ -420,6 +447,9 @@ export default function PlayerDetailModal() {
                             <td style={{ padding: '8px', fontWeight: 'bold' }}>
                               {scoringSettings ? t.leaguePts.toFixed(2) : '-'}
                             </td>
+                            <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                              {showPar ? (weeklyPar[t.season] ? seasonParTotal(t.season).toFixed(2) : '...') : '-'}
+                            </td>
                             {SUM_KEYS.map(key => (
                               <td key={key} style={{ padding: '8px' }}>
                                 {key === 'pts_ppr' ? t[key].toFixed(2) : t[key]}
@@ -428,11 +458,12 @@ export default function PlayerDetailModal() {
                           </tr>
                           {isExpanded && (
                             <tr>
-                              <td colSpan={SUM_KEYS.length + 2} style={{ padding: '0 0 12px 20px' }}>
+                              <td colSpan={SUM_KEYS.length + 3} style={{ padding: '0 0 12px 20px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                   <thead>
                                     <tr>
                                       <th style={{ padding: '6px', textAlign: 'left', color: '#aaa', fontWeight: 'normal' }}>Fantasy Pts</th>
+                                      <th style={{ padding: '6px', textAlign: 'left', color: '#aaa', fontWeight: 'normal' }}>PAR</th>
                                       {WEEK_COLUMNS.map(([key, label]) => (
                                         <th key={key} style={{ padding: '6px', textAlign: 'left', color: '#aaa', fontWeight: 'normal' }}>{label}</th>
                                       ))}
@@ -449,6 +480,9 @@ export default function PlayerDetailModal() {
                                             title={rank != null ? `#${rank} at ${player.position} that week` : undefined}
                                           >
                                             {w.leaguePts != null ? w.leaguePts.toFixed(2) : '-'}
+                                          </td>
+                                          <td style={{ padding: '6px' }}>
+                                            {showPar ? (weeklyPar[t.season] ? (weeklyPar[t.season][w.week] ?? 0).toFixed(2) : '...') : '-'}
                                           </td>
                                           {WEEK_COLUMNS.map(([key]) => (
                                             <td key={key} style={{ padding: '6px' }}>{w[key] ?? '-'}</td>
