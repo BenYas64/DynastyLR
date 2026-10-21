@@ -224,9 +224,14 @@ export default function PlayerDetailModal() {
 
   // Rookie season gating for PAR fetches below, computed up front (not just
   // at render time) since player.years_exp is known as soon as player loads.
+  // years_exp counts prior seasons only (0 in a player's own rookie year),
+  // so their debut season is always CURRENT_SEASON - years_exp - the old
+  // "- 1, clamped to 0" version undercounted every years_exp >= 1 by a full
+  // season (e.g. a 2025 rookie's own 2025 season got excluded, leaving only
+  // 2026 visible - exactly the bug this fixes).
   const earliestSeason = !player || player.years_exp == null
     ? null
-    : CURRENT_SEASON - Math.max(player.years_exp - 1, 0)
+    : CURRENT_SEASON - player.years_exp
 
   useEffect(() => {
     if (!selectedLeagueId || !playerId || expandedSeason == null || weeklyRanks[expandedSeason]) return
