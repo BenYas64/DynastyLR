@@ -4,6 +4,7 @@ import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 
 const API = 'https://api.dynastylr.site'
+const CURRENT_SEASON = 2026
 
 export default function Draft() {
   const { selectedLeagueId } = useAccount()
@@ -13,6 +14,12 @@ export default function Draft() {
   const [rostersByLeague, setRostersByLeague] = useState({})
   const [usersByLeague, setUsersByLeague] = useState({})
   const [players, setPlayers] = useState({})
+  const [seasonToLeagueId, setSeasonToLeagueId] = useState({})
+  // { [season]: { [player_id]: totalPar } } - only ever populated for a
+  // rookie draft's own picks, one season at a time as each fetch resolves.
+  const [rookiePar, setRookiePar] = useState({})
+  // { [player_id]: { dynasty_value, dynasty_position_rank, ... } }
+  const [rookieValues, setRookieValues] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -60,10 +67,18 @@ export default function Draft() {
               leagueId,
               season,
               rounds,
+              // Every pick in one draft shares the same draft_type (it's a
+              // draft-level Sleeper setting - see sync_drafts.py), so any
+              // pick's value works as the draft's own.
+              draftType: draftPicks[0]?.draft_type,
               picks: [...draftPicks].sort((a, b) => a.pick_no - b.pick_no),
             })
           })
         })
+
+        const seasonMap = {}
+        seasons.forEach(({ season, leagueId }) => { seasonMap[season] = leagueId })
+        setSeasonToLeagueId(seasonMap)
 
         // Newest season first; within a season, most recently created
         // draft first (draft_id is a Sleeper snowflake id, so it sorts
@@ -95,6 +110,45 @@ export default function Draft() {
       })
   }, [selectedLeagueId])
 
+  // .find() returns a reference into draftOptions itself (not a new
+  // object), so this stays referentially stable across renders unless
+  // draftOptions/selectedKey actually change - safe to use as an effect
+  // dependency below.
+  const selected = draftOptions.find(o => o.key === selectedKey) || draftOptions[0]
+
+  // Rookie value columns: PAR for each of the player's first 3 real NFL
+  // seasons (capped at CURRENT_SEASON - a season that hasn't happened yet
+  // has no league/stats to compute it from) plus current dynasty value.
+  // Only meaningful for an actual rookie draft (see draft_type).
+  const rookieSeasons = selected && selected.draftType === 'rookie'
+    ? [selected.season, selected.season + 1, selected.season + 2].filter(s => s <= CURRENT_SEASON && seasonToLeagueId[s])
+    : []
+
+  useEffect(() => {
+    if (!selected || selected.draftType !== 'rookie') return
+    const ids = [...new Set(selected.picks.map(p => p.player_id).filter(Boolean))]
+    if (ids.length === 0) return
+
+    Promise.all(rookieSeasons.map(season =>
+      fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-totals/${season}?ids=${ids.join(',')}`)
+        .then(r => r.json())
+        .then(totals => ({ season, totals }))
+    )).then(results => {
+      setRookiePar(prev => {
+        const next = { ...prev }
+        results.forEach(({ season, totals }) => { next[season] = totals })
+        return next
+      })
+    }).catch(() => {})
+
+    if (selectedLeagueId) {
+      fetch(`${API}/players/values?ids=${ids.join(',')}&league_id=${selectedLeagueId}`)
+        .then(r => r.json())
+        .then(setRookieValues)
+        .catch(() => setRookieValues({}))
+    }
+  }, [selected, rookieSeasons.join(','), selectedLeagueId])
+
   if (!selectedLeagueId) return (
     <p style={{ padding: '20px' }}>
       Sign in and select a league on the Account page to view draft results.
@@ -115,7 +169,6 @@ export default function Draft() {
   if (error) return <div style={{ padding: '20px' }}>{draftSelect}<p style={{ color: 'red' }}>Error: {error}</p></div>
   if (draftOptions.length === 0) return <div style={{ padding: '20px' }}>{draftSelect}<p>No draft results found for this league.</p></div>
 
-  const selected = draftOptions.find(o => o.key === selectedKey) || draftOptions[0]
   const rosters = rostersByLeague[selected.leagueId] || []
   const users = usersByLeague[selected.leagueId] || {}
 
@@ -144,7 +197,7 @@ export default function Draft() {
       {Object.keys(byRound).map(Number).sort((a, b) => a - b).map(round => (
         <div key={round} style={{ marginBottom: '16px' }}>
           <p style={{ color: '#666', fontWeight: 'bold', margin: '0 0 6px' }}>Round {round}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '600px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: selected.draftType === 'rookie' ? '900px' : '600px' }}>
             {byRound[round].map(pick => {
               const player = players[pick.player_id]
               const team = teamFor(pick.roster_id)
@@ -168,6 +221,21 @@ export default function Draft() {
                     <span style={{ background: '#d97706', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
                       Keeper
                     </span>
+                  )}
+                  {selected.draftType === 'rookie' && pick.player_id && (
+                    <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto', flexShrink: 0 }}>
+                      {rookieSeasons.map(season => {
+                        const total = rookiePar[season]?.[pick.player_id]
+                        return (
+                          <span key={season} title={`Points above replacement, ${season}`} style={{ color: '#666', fontSize: '13px', minWidth: '65px', textAlign: 'right' }}>
+                            PAR '{String(season).slice(2)}: {total != null ? total.toFixed(1) : '-'}
+                          </span>
+                        )
+                      })}
+                      <span style={{ color: '#666', fontSize: '13px', minWidth: '90px', textAlign: 'right' }}>
+                        Dynasty: {rookieValues[pick.player_id]?.dynasty_value ?? '-'}
+                      </span>
+                    </div>
                   )}
                 </div>
               )

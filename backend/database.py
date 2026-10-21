@@ -460,6 +460,13 @@ class DraftPick(Base):
     picked_by = Column(String)
     player_id = Column(String)
     is_keeper = Column(Boolean)
+    # "rookie" or "other" (startup/supplemental/expansion) - from Sleeper's
+    # own draft settings.player_type (1 = rookies-only pool), not inferred
+    # from round count, which isn't reliable (a supplemental all-player
+    # draft can be just as short as a rookie draft). Denormalized onto every
+    # pick rather than a separate Draft table, since nothing else needs
+    # draft-level metadata yet.
+    draft_type = Column(String)
 
 class PlayerValue(Base):
     """Trade value from FantasyCalc - a market signal derived from real

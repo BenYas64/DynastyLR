@@ -30,6 +30,13 @@ def sync_drafts():
                 if not picks:
                     continue
 
+                # Sleeper's own signal for "rookies only" - settings.player_type
+                # == 1. Round count alone isn't reliable: a supplemental
+                # all-player draft (e.g. stocking a new team's whole roster)
+                # can be just as short as a real rookie draft.
+                player_type = (draft.get("settings") or {}).get("player_type")
+                draft_type = "rookie" if player_type == 1 else "other"
+
                 rows = [
                     {
                         "league_id": league.league_id,
@@ -41,6 +48,7 @@ def sync_drafts():
                         "picked_by": p.get("picked_by"),
                         "player_id": p.get("player_id"),
                         "is_keeper": p.get("is_keeper"),
+                        "draft_type": draft_type,
                     }
                     for p in picks
                 ]
@@ -55,6 +63,7 @@ def sync_drafts():
                         "picked_by": stmt.excluded.picked_by,
                         "player_id": stmt.excluded.player_id,
                         "is_keeper": stmt.excluded.is_keeper,
+                        "draft_type": stmt.excluded.draft_type,
                     },
                 )
                 db.execute(stmt)

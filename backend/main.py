@@ -163,6 +163,45 @@ def browse_players(
 
     return {"total": total, "players": page}
 
+@app.get("/players/values")
+def get_player_values(ids: str, league_id: str | None = None, db: Session = Depends(get_db)):
+    """Bulk redraft/dynasty trade value lookup, same resolution rules as
+    get_player()'s value fields below - built for pages like the rookie
+    draft columns that need this for dozens of players in one request
+    instead of one request per player. Registered before /players/{player_id}
+    so "values" isn't swallowed as a player_id, same reason /players/browse is."""
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return {}
+
+    league = db.query(League).filter(League.league_id == league_id).first() if league_id else None
+    value_ppr = league.value_ppr if league and league.value_ppr is not None else 0.5
+    value_tep = league.value_tep if league and league.value_tep is not None else 0.0
+    include_dynasty = bool(league and league.league_type == "dynasty")
+
+    rows = db.query(PlayerValue).filter(
+        PlayerValue.player_id.in_(id_list),
+        PlayerValue.ppr == value_ppr,
+        PlayerValue.tep == value_tep,
+    ).all()
+
+    result = {
+        player_id: {
+            "redraft_value": None, "redraft_position_rank": None,
+            "dynasty_value": None, "dynasty_position_rank": None,
+        }
+        for player_id in id_list
+    }
+    for row in rows:
+        entry = result[row.player_id]
+        if not row.is_dynasty:
+            entry["redraft_value"] = row.value
+            entry["redraft_position_rank"] = row.position_rank
+        elif include_dynasty:
+            entry["dynasty_value"] = row.value
+            entry["dynasty_position_rank"] = row.position_rank
+    return result
+
 @app.get("/players/{player_id}")
 def get_player(player_id: str, league_id: str | None = None, db: Session = Depends(get_db)):
     player = db.query(Player).filter(Player.player_id == player_id).first()
@@ -229,6 +268,32 @@ def get_points_above_replacement(league_id: str, player_id: str, season: int, db
         return {}
     par = cached_position_week_par(db, league, season, player.position)
     return par.get(player_id, {})
+
+@app.get("/league/{league_id}/players/points-above-replacement-totals/{season}")
+def get_points_above_replacement_totals(league_id: str, season: int, ids: str, db: Session = Depends(get_db)):
+    """Bulk season-total PAR for a list of players, reusing the same
+    per-position cache (one query per distinct position among `ids`, not
+    one per player) - built for the draft page's rookie-class columns,
+    which need this for dozens of players at once."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return {}
+
+    positions = dict(db.query(Player.player_id, Player.position).filter(Player.player_id.in_(id_list)).all())
+    par_by_position = {}
+    totals = {}
+    for player_id in id_list:
+        position = positions.get(player_id)
+        if not position:
+            totals[player_id] = 0.0
+            continue
+        if position not in par_by_position:
+            par_by_position[position] = cached_position_week_par(db, league, season, position)
+        totals[player_id] = sum(par_by_position[position].get(player_id, {}).values())
+    return totals
 
 @app.get("/league/{league_id}/players/{player_id}/stat-breakdown/{week}")
 def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = Depends(get_db)):
@@ -980,6 +1045,7 @@ def get_draft(league_id: str, db: Session = Depends(get_db)):
             "picked_by": p.picked_by,
             "player_id": p.player_id,
             "is_keeper": p.is_keeper,
+            "draft_type": p.draft_type,
         }
         for p in rows
     ]
