@@ -16,7 +16,7 @@ export default function League() {
   const [error, setError] = useState(null)
 
   const [view, setView] = useState('weekly') // 'weekly' | 'bracket'
-  const [week, setWeek] = useState(1)
+  const [week, setWeek] = useState(null)
   const [matchups, setMatchups] = useState([])
   const [winnersBracket, setWinnersBracket] = useState(null)
   const [losersBracket, setLosersBracket] = useState(null)
@@ -29,16 +29,20 @@ export default function League() {
     setError(null)
     setWinnersBracket(null)
     setLosersBracket(null)
+    // Default the week dropdown to the upcoming/live matchup week, once per league.
+    setWeek(null)
     Promise.all([
       fetch(`${API}/league/${selectedLeagueId}`).then(r => r.json()),
       fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
-      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json())
-    ]).then(([leagueData, rostersData, usersData]) => {
+      fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json()),
+      fetch(`${API}/current-week`).then(r => r.json()),
+    ]).then(([leagueData, rostersData, usersData, currentWeek]) => {
       const userMap = {}
       usersData.forEach(u => userMap[u.user_id] = u)
       setLeague(leagueData)
       setRosters(rostersData)
       setUsers(userMap)
+      setWeek(currentWeek.week)
       setLoading(false)
     }).catch(err => {
       setError(err.message)
@@ -47,7 +51,7 @@ export default function League() {
   }, [selectedLeagueId])
 
   useEffect(() => {
-    if (!selectedLeagueId || view !== 'weekly') return
+    if (!selectedLeagueId || view !== 'weekly' || week == null) return
     setMatchupsLoading(true)
     setMatchupsError(null)
     fetch(`${API}/league/${selectedLeagueId}/matchups/${week}`)
