@@ -71,6 +71,11 @@ export default function ValueSettings() {
   )
   if (loading) return <p style={{ padding: '20px' }}>Loading value settings...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
+  // league is still null on the very first render, before the fetch above
+  // has had a chance to even start (loading defaults to false, not true) -
+  // without this, league.season below throws and crashes the whole app,
+  // since nothing here has an error boundary.
+  if (!league) return <p style={{ padding: '20px' }}>Loading value settings...</p>
 
   const canEdit = isCommish && league.season === CURRENT_SEASON
 
