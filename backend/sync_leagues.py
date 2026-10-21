@@ -9,6 +9,15 @@ from database import SessionLocal, League
 BEN_USER_ID = "911700661134299136"
 CURRENT_SEASON = 2026
 
+# The value tiers player_values is actually stored for (see
+# sync_player_values.py) - a league's real scoring_settings rec/TE-bonus
+# weight is snapped to whichever of these it's closest to, so every league
+# maps onto a combination we actually have data for.
+VALUE_TIERS = [0, 0.5, 1.0]
+
+def nearest_value_tier(weight):
+    return min(VALUE_TIERS, key=lambda t: abs((weight or 0) - t))
+
 def discover_leagues(season, user_id=BEN_USER_ID):
     """Adds any of this user's leagues for `season` that aren't in the
     leagues table yet - a season rollover or a brand new league both show up
@@ -31,6 +40,7 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 print(f"{league_id}: detail request failed ({detail_resp.status_code})")
                 continue
             data = detail_resp.json()
+            scoring = data.get("scoring_settings") or {}
 
             db.add(League(
                 league_id=league_id,
@@ -38,11 +48,13 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 season=data.get("season"),
                 status=data.get("status"),
                 total_rosters=data.get("total_rosters"),
-                scoring_settings=json.dumps(data.get("scoring_settings")),
+                scoring_settings=json.dumps(scoring),
                 roster_positions=json.dumps(data.get("roster_positions")),
                 playoff_week_start=data.get("settings", {}).get("playoff_week_start"),
                 previous_league_id=data.get("previous_league_id"),
                 league_median=False,
+                value_ppr=nearest_value_tier(scoring.get("rec")),
+                value_tep=nearest_value_tier(scoring.get("bonus_rec_te")),
             ))
             db.commit()
             added += 1
@@ -67,10 +79,18 @@ def sync_leagues():
                 continue
 
             data = resp.json()
+            scoring = data.get("scoring_settings") or {}
             league = db.query(League).filter(League.league_id == league_id).first()
-            league.scoring_settings = json.dumps(data.get("scoring_settings"))
+            league.scoring_settings = json.dumps(scoring)
             league.roster_positions = json.dumps(data.get("roster_positions"))
             league.playoff_week_start = data.get("settings", {}).get("playoff_week_start")
+            # Only fill these in if unset - a commissioner's own choice (via
+            # the value-settings page) should never get silently overwritten
+            # by a routine sync just because scoring_settings was re-fetched.
+            if league.value_ppr is None:
+                league.value_ppr = nearest_value_tier(scoring.get("rec"))
+            if league.value_tep is None:
+                league.value_tep = nearest_value_tier(scoring.get("bonus_rec_te"))
             db.commit()
             print(f"{league_id}: {data.get('name')} updated")
 

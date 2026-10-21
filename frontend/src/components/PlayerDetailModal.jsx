@@ -90,7 +90,8 @@ export default function PlayerDetailModal() {
     setLoading(true)
     setError(null)
     setExpandedSeason(null)
-    fetch(`${API}/players/${playerId}`)
+    const query = selectedLeagueId ? `?league_id=${selectedLeagueId}` : ''
+    fetch(`${API}/players/${playerId}${query}`)
       .then(r => {
         if (!r.ok) throw new Error(r.status === 404 ? 'Player not found' : 'Failed to load player')
         return r.json()
@@ -106,7 +107,7 @@ export default function PlayerDetailModal() {
         setError(err.message)
         setLoading(false)
       })
-  }, [playerId])
+  }, [playerId, selectedLeagueId])
 
   useEffect(() => {
     if (!selectedLeagueId) {

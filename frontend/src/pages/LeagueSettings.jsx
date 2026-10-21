@@ -35,6 +35,21 @@ export default function LeagueSettings() {
             Roster Settings
           </button>
         </Link>
+        <Link to="/league-settings/value" style={{ textDecoration: 'none' }}>
+          <button
+            style={{
+              padding: '10px 24px',
+              fontSize: '16px',
+              background: '#1a1a2e',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            Value Settings
+          </button>
+        </Link>
       </div>
     </div>
   )

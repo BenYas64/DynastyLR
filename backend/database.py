@@ -395,6 +395,13 @@ class League(Base):
     # its real head-to-head matchup. Only set true for leagues that actually
     # use this Sleeper feature, not a default for every league.
     league_median = Column(Boolean)
+    # Which FantasyCalc value slice to show this league's players with - not
+    # the league's real scoring (scoring_settings is still that), just which
+    # of the 3x3 PPR/TEP combinations in player_values best matches it.
+    # Defaulted from scoring_settings (see sync_leagues.py) but editable like
+    # any other league setting.
+    value_ppr = Column(Float)
+    value_tep = Column(Float)
 
 class Roster(Base):
     __tablename__ = "rosters"
@@ -451,13 +458,19 @@ class DraftPick(Base):
     is_keeper = Column(Boolean)
 
 class PlayerValue(Base):
-    """Dynasty trade value from FantasyCalc - a market signal derived from
-    real completed trades, not an expert ranking. Scoped to one league
-    format (half-PPR, Superflex, 12 teams - this project's actual league);
-    a different format's values would need a separate fetch/table if ever
-    needed, since FantasyCalc returns different numbers per format."""
+    """Trade value from FantasyCalc - a market signal derived from real
+    completed trades, not an expert ranking. FantasyCalc returns different
+    numbers per format, so one player has up to 18 rows here: dynasty or
+    redraft x ppr (0/0.5/1) x tep (0/0.5/1, i.e. none/te+/te++) - always for
+    a 12-team, Superflex (numQbs=2) league, since that's what every league
+    in this project actually is. A league picks which row applies to it via
+    League.value_ppr/value_tep (is_dynasty is chosen per use, not per
+    league, since the same league wants both dynasty and redraft views)."""
     __tablename__ = "player_values"
     player_id = Column(String, primary_key=True)
+    is_dynasty = Column(Boolean, primary_key=True)
+    ppr = Column(Float, primary_key=True)
+    tep = Column(Float, primary_key=True)
     value = Column(Integer)
     overall_rank = Column(Integer)
     position_rank = Column(Integer)

@@ -148,14 +148,28 @@ def browse_players(
     return {"total": total, "players": page}
 
 @app.get("/players/{player_id}")
-def get_player(player_id: str, db: Session = Depends(get_db)):
+def get_player(player_id: str, league_id: str | None = None, db: Session = Depends(get_db)):
     player = db.query(Player).filter(Player.player_id == player_id).first()
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     stats = db.query(Stat).filter(Stat.player_id == player_id).order_by(
         Stat.season.desc(), Stat.week.desc()
     ).all()
-    value = db.query(PlayerValue).filter(PlayerValue.player_id == player_id).first()
+
+    # Which of the 18 FantasyCalc slices (see player_values) to show -
+    # the calling league's own value_ppr/value_tep if it has one set, else
+    # a reasonable default (half-PPR, no TEP) so this still works without
+    # a league in context.
+    league = db.query(League).filter(League.league_id == league_id).first() if league_id else None
+    value_ppr = league.value_ppr if league and league.value_ppr is not None else 0.5
+    value_tep = league.value_tep if league and league.value_tep is not None else 0.0
+
+    value = db.query(PlayerValue).filter(
+        PlayerValue.player_id == player_id,
+        PlayerValue.is_dynasty == True,
+        PlayerValue.ppr == value_ppr,
+        PlayerValue.tep == value_tep,
+    ).first()
     return {
         "player": player,
         "stats": stats,
@@ -373,6 +387,43 @@ def update_scoring_settings(league_id: str, payload: ScoringSettingsUpdate, db: 
             del cache[key]
 
     return {"league_id": league_id, "scoring_settings": payload.scoring_settings}
+
+VALUE_TIERS = (0, 0.5, 1.0)
+
+class ValueSettingsUpdate(BaseModel):
+    user_id: str
+    value_ppr: float
+    value_tep: float
+
+@app.put("/league/{league_id}/value-settings")
+def update_value_settings(league_id: str, payload: ValueSettingsUpdate, db: Session = Depends(get_db)):
+    """Which FantasyCalc value slice (see player_values) this league's
+    players should be shown with - defaulted from scoring_settings by
+    sync_leagues.py, but a commissioner can override it here same as any
+    other league setting."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    membership = db.query(LeagueUser).filter(
+        LeagueUser.league_id == league_id,
+        LeagueUser.user_id == payload.user_id,
+    ).first()
+    if not membership or not membership.commish:
+        raise HTTPException(status_code=403, detail="Only the league commissioner can edit value settings")
+
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    if is_superseded:
+        raise HTTPException(status_code=403, detail="Value settings for past seasons cannot be edited")
+
+    if payload.value_ppr not in VALUE_TIERS or payload.value_tep not in VALUE_TIERS:
+        raise HTTPException(status_code=400, detail="value_ppr and value_tep must each be 0, 0.5, or 1")
+
+    league.value_ppr = payload.value_ppr
+    league.value_tep = payload.value_tep
+    db.commit()
+
+    return {"league_id": league_id, "value_ppr": league.value_ppr, "value_tep": league.value_tep}
 
 # Canonical slot order the roster-positions editor writes back in. BN entries
 # can sit anywhere in the array without affecting starter-slot indexing (slot

@@ -4,6 +4,7 @@ import League from './pages/League.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import ScoringSettings from './pages/ScoringSettings.jsx'
 import RosterSettings from './pages/RosterSettings.jsx'
+import ValueSettings from './pages/ValueSettings.jsx'
 import MyTeam from './pages/MyTeam.jsx'
 import MyMatchup from './pages/MyMatchup.jsx'
 import HeadToHead from './pages/HeadToHead.jsx'
@@ -69,6 +70,7 @@ function App() {
             <Route path="/league-settings" element={<LeagueSettings />} />
             <Route path="/league-settings/scoring" element={<ScoringSettings />} />
             <Route path="/league-settings/roster" element={<RosterSettings />} />
+            <Route path="/league-settings/value" element={<ValueSettings />} />
             <Route path="/my-team" element={<MyTeam />} />
             <Route path="/players" element={<Players />} />
             <Route path="/account" element={<Account />} />
