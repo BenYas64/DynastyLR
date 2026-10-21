@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick
+from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
 from scoring import scoring_expression, NON_STAT_COLUMNS
 
 app = FastAPI()
@@ -155,7 +155,13 @@ def get_player(player_id: str, db: Session = Depends(get_db)):
     stats = db.query(Stat).filter(Stat.player_id == player_id).order_by(
         Stat.season.desc(), Stat.week.desc()
     ).all()
-    return {"player": player, "stats": stats}
+    value = db.query(PlayerValue).filter(PlayerValue.player_id == player_id).first()
+    return {
+        "player": player,
+        "stats": stats,
+        "dynasty_value": value.value if value else None,
+        "dynasty_position_rank": value.position_rank if value else None,
+    }
 
 @app.get("/league/{league_id}/players/{player_id}/weekly-rank/{season}")
 def get_weekly_rank(league_id: str, player_id: str, season: int, db: Session = Depends(get_db)):
