@@ -31,6 +31,11 @@ export default function HeadToHead() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('total_games')
   const [sortDir, setSortDir] = useState('desc')
+  const [teamFilter, setTeamFilter] = useState('')
+
+  useEffect(() => {
+    setTeamFilter('')
+  }, [selectedLeagueId])
 
   useEffect(() => {
     if (!selectedLeagueId) return
@@ -87,7 +92,16 @@ export default function HeadToHead() {
   // Each game has two team scores, so the per-team average divides by 2x games.
   const leagueAvg = totalGames ? totalPoints / (totalGames * 2) : 0
 
-  const sorted = [...rows].sort((a, b) => {
+  // Every roster that appears on either side of a matchup, for the team filter dropdown.
+  const teamOptions = [...new Set(records.flatMap(rec => [rec.roster_id_1, rec.roster_id_2]))]
+    .map(rosterId => ({ rosterId, name: teamFor(rosterId).name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const filtered = teamFilter === ''
+    ? rows
+    : rows.filter(rec => rec.roster_id_1 === Number(teamFilter) || rec.roster_id_2 === Number(teamFilter))
+
+  const sorted = [...filtered].sort((a, b) => {
     const diff = a[sortKey] - b[sortKey]
     return sortDir === 'desc' ? -diff : diff
   })
@@ -105,6 +119,17 @@ export default function HeadToHead() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Head-to-Head Records</h2>
       <p style={{ color: '#666' }}>All-time regular season and playoff matchup results between every pair of ROSTERS in this league's history.</p>
+
+      <select
+        value={teamFilter}
+        onChange={e => setTeamFilter(e.target.value)}
+        style={{ padding: '8px', fontSize: '14px', marginTop: '12px' }}
+      >
+        <option value="">All Teams</option>
+        {teamOptions.map(opt => (
+          <option key={opt.rosterId} value={opt.rosterId}>{opt.name}</option>
+        ))}
+      </select>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
         <thead>
