@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import League from './pages/League.jsx'
 import LeagueSettings from './pages/LeagueSettings.jsx'
 import ScoringSettings from './pages/ScoringSettings.jsx'
@@ -54,28 +55,40 @@ function Nav() {
   )
 }
 
+function AppRoutes() {
+  // Keyed by path so a crash on one page doesn't leave every later page
+  // stuck behind the same boundary instance - navigating anywhere, even
+  // back to the page that just crashed, starts it fresh.
+  const location = useLocation()
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Routes>
+        <Route path="/" element={<League />} />
+        <Route path="/league" element={<League />} />
+        <Route path="/matchup" element={<MyMatchup />} />
+        <Route path="/head-to-head" element={<HeadToHead />} />
+        <Route path="/draft" element={<Draft />} />
+        <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
+        <Route path="/league-settings" element={<LeagueSettings />} />
+        <Route path="/league-settings/scoring" element={<ScoringSettings />} />
+        <Route path="/league-settings/roster" element={<RosterSettings />} />
+        <Route path="/league-settings/value" element={<ValueSettings />} />
+        <Route path="/my-team" element={<MyTeam />} />
+        <Route path="/players" element={<Players />} />
+        <Route path="/account" element={<Account />} />
+        <Route path="/league/:leagueId/roster/:rosterId" element={<TeamRoster />} />
+      </Routes>
+    </ErrorBoundary>
+  )
+}
+
 function App() {
   return (
     <AccountProvider>
       <PlayerModalProvider>
         <div>
           <Nav />
-          <Routes>
-            <Route path="/" element={<League />} />
-            <Route path="/league" element={<League />} />
-            <Route path="/matchup" element={<MyMatchup />} />
-            <Route path="/head-to-head" element={<HeadToHead />} />
-            <Route path="/draft" element={<Draft />} />
-            <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
-            <Route path="/league-settings" element={<LeagueSettings />} />
-            <Route path="/league-settings/scoring" element={<ScoringSettings />} />
-            <Route path="/league-settings/roster" element={<RosterSettings />} />
-            <Route path="/league-settings/value" element={<ValueSettings />} />
-            <Route path="/my-team" element={<MyTeam />} />
-            <Route path="/players" element={<Players />} />
-            <Route path="/account" element={<Account />} />
-            <Route path="/league/:leagueId/roster/:rosterId" element={<TeamRoster />} />
-          </Routes>
+          <AppRoutes />
           <PlayerDetailModal />
         </div>
       </PlayerModalProvider>
