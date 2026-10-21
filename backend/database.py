@@ -450,6 +450,20 @@ class DraftPick(Base):
     player_id = Column(String)
     is_keeper = Column(Boolean)
 
+class PlayerValue(Base):
+    """Dynasty trade value from FantasyCalc - a market signal derived from
+    real completed trades, not an expert ranking. Scoped to one league
+    format (half-PPR, Superflex, 12 teams - this project's actual league);
+    a different format's values would need a separate fetch/table if ever
+    needed, since FantasyCalc returns different numbers per format."""
+    __tablename__ = "player_values"
+    player_id = Column(String, primary_key=True)
+    value = Column(Integer)
+    overall_rank = Column(Integer)
+    position_rank = Column(Integer)
+    trend_30_day = Column(Integer)
+    fetched_at = Column(DateTime)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
