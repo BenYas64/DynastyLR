@@ -248,7 +248,7 @@ export default function Draft() {
                     onClick={() => player && openPlayer(pick.player_id)}
                     style={{ cursor: player ? 'pointer' : 'default', fontWeight: 'bold' }}
                   >
-                    {player ? `${player.first_name} ${player.last_name} - ${player.position} - ${player.team || 'FA'}` : `Player ${pick.player_id}`}
+                    {player ? `${player.first_name} ${player.last_name} - ${player.position}` : `Player ${pick.player_id}`}
                   </span>
                   {pick.is_keeper && (
                     <span style={{ background: '#d97706', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
