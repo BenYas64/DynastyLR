@@ -6,6 +6,24 @@ import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 const API = 'https://api.dynastylr.site'
 const CURRENT_SEASON = 2026
 
+// PAR-per-week-completed tiers, same 4-color language as the weekly rank
+// coloring on the individual player page. Rate, not raw PAR, so a rookie's
+// 6 games this season reads on the same scale as a vet's full 17 - PAR/17
+// for any finished season, PAR/(weeks actually played so far) for the one
+// still in progress.
+const PAR_RATE_TIERS = [10, 6.67, 3.33]
+const PAR_RATE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626']
+
+function parRateColor(total, weeksCompleted) {
+  if (total == null || !weeksCompleted) return null
+  const rate = total / weeksCompleted
+  const [tier1, tier2, tier3] = PAR_RATE_TIERS
+  if (rate >= tier1) return PAR_RATE_COLORS[0]
+  if (rate >= tier2) return PAR_RATE_COLORS[1]
+  if (rate >= tier3) return PAR_RATE_COLORS[2]
+  return PAR_RATE_COLORS[3]
+}
+
 export default function Draft() {
   const { selectedLeagueId } = useAccount()
   const { openPlayer } = usePlayerModal()
@@ -22,6 +40,17 @@ export default function Draft() {
   const [rookieValues, setRookieValues] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Sleeper's "week currently being played" - used only to know how many
+  // weeks of the in-progress season have actually happened, for the PAR
+  // rate coloring below.
+  const [currentNflWeek, setCurrentNflWeek] = useState(null)
+
+  useEffect(() => {
+    fetch(`${API}/current-week`)
+      .then(r => r.json())
+      .then(d => setCurrentNflWeek(d.week))
+      .catch(() => {})
+  }, [])
 
   // One dropdown entry per actual draft across every season in this
   // league's history, not per season - a season can have more than one
@@ -123,6 +152,11 @@ export default function Draft() {
   const rookieSeasons = selected && selected.draftType === 'rookie'
     ? [selected.season, selected.season + 1, selected.season + 2].filter(s => s <= CURRENT_SEASON && seasonToLeagueId[s])
     : []
+
+  // No league here plays a week 18 (see scoring.position_week_par), so a
+  // finished season always has 17 real weeks; the season still in progress
+  // only has however many weeks have actually been played so far.
+  const weeksCompletedFor = season => season < CURRENT_SEASON ? 17 : Math.max((currentNflWeek || 1) - 1, 0)
 
   useEffect(() => {
     if (!selected || selected.draftType !== 'rookie') return
@@ -226,8 +260,14 @@ export default function Draft() {
                     <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto', flexShrink: 0 }}>
                       {rookieSeasons.map(season => {
                         const total = rookiePar[season]?.[pick.player_id]
+                        const weeksCompleted = weeksCompletedFor(season)
+                        const background = parRateColor(total, weeksCompleted)
                         return (
-                          <span key={season} title={`Points above replacement, ${season}`} style={{ color: '#666', fontSize: '13px', minWidth: '65px', textAlign: 'right' }}>
+                          <span
+                            key={season}
+                            title={total != null ? `${total.toFixed(1)} PAR over ${weeksCompleted} weeks, ${season}` : `Points above replacement, ${season}`}
+                            style={{ color: '#666', fontSize: '13px', minWidth: '65px', textAlign: 'right', background, padding: background ? '2px 6px' : 0, borderRadius: '4px' }}
+                          >
                             PAR '{String(season).slice(2)}: {total != null ? total.toFixed(1) : '-'}
                           </span>
                         )
