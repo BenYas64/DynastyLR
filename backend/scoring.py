@@ -63,7 +63,9 @@ def position_week_par(db, league, season, position, model=Stat):
     since both of those are league-specific and this needs to stay
     comparable to nothing but itself. Replacement level each week is the
     score of the player ranked just below replacement_starter_counts'
-    estimate for that position; below it counts as 0, never negative."""
+    estimate for that position; below it counts as 0, never negative.
+    Week 18 is excluded entirely - no league here plays a fantasy week
+    that late, so it shouldn't count toward a season PAR total."""
     n = replacement_starter_counts(league).get(position)
     if not n:
         return {}
@@ -71,7 +73,7 @@ def position_week_par(db, league, season, position, model=Stat):
     rows = (
         db.query(model.player_id, model.week, scoring_expression(league, model))
         .join(Player, Player.player_id == model.player_id)
-        .filter(model.season == season, model.season_type == "regular", Player.position == position)
+        .filter(model.season == season, model.season_type == "regular", model.week != 18, Player.position == position)
         .all()
     )
 
