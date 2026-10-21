@@ -1,7 +1,7 @@
 import json
 from statistics import median
 from sqlalchemy import func
-from database import Stat, Roster, Matchup, League
+from database import Stat, Roster, Matchup, League, Player
 
 NON_STAT_COLUMNS = {"player_id", "season", "week", "season_type", "team", "opponent"}
 
@@ -21,6 +21,71 @@ def scoring_expression(league, model=Stat):
             for term in terms[1:]:
                 total = total + term
     return total
+
+# Estimated share of each flex-type roster slot that actually goes to each
+# eligible position, used only to derive how many "starters" exist at a
+# single position when that position can also be filled via a flex slot -
+# real per-league flex usage would make points-above-replacement
+# incomparable across leagues/years, so this is a deliberately fixed,
+# adjustable estimate rather than something derived from real rosters.
+# SUPER_FLEX skews heavily to QB since that's the entire reason Superflex
+# leagues create a second QB market.
+FLEX_SPLITS = {
+    "FLEX": {"RB": 0.45, "WR": 0.45, "TE": 0.10},
+    "WRRB_FLEX": {"RB": 0.55, "WR": 0.45},
+    "REC_FLEX": {"WR": 0.85, "TE": 0.15},
+    "SUPER_FLEX": {"QB": 0.75, "RB": 0.15, "WR": 0.08, "TE": 0.02},
+}
+
+def replacement_starter_counts(league):
+    """How many starters exist leaguewide at each offensive skill position -
+    base single-position slots plus an estimated share of any flex-type
+    slot eligible for it (see FLEX_SPLITS). The player ranked just below
+    this count at a position, for a given week, is the replacement level
+    points-above-replacement is measured against."""
+    if not league or not league.roster_positions:
+        return {}
+    positions = json.loads(league.roster_positions)
+    per_team = {"QB": 0.0, "RB": 0.0, "WR": 0.0, "TE": 0.0}
+    for slot in positions:
+        if slot in per_team:
+            per_team[slot] += 1
+        elif slot in FLEX_SPLITS:
+            for pos, share in FLEX_SPLITS[slot].items():
+                per_team[pos] += share
+    num_teams = league.total_rosters or 12
+    return {pos: max(1, round(n * num_teams)) for pos, n in per_team.items()}
+
+def position_week_par(db, league, season, position, model=Stat):
+    """Per-player points above replacement at `position`, for every week of
+    a season at once - computed live from the league's own scoring and
+    roster construction (same as scoring_expression itself), not stored,
+    since both of those are league-specific and this needs to stay
+    comparable to nothing but itself. Replacement level each week is the
+    score of the player ranked just below replacement_starter_counts'
+    estimate for that position; below it counts as 0, never negative."""
+    n = replacement_starter_counts(league).get(position)
+    if not n:
+        return {}
+
+    rows = (
+        db.query(model.player_id, model.week, scoring_expression(league, model))
+        .join(Player, Player.player_id == model.player_id)
+        .filter(model.season == season, model.season_type == "regular", Player.position == position)
+        .all()
+    )
+
+    by_week = {}
+    for player_id, week, pts in rows:
+        by_week.setdefault(week, []).append((player_id, pts or 0))
+
+    par = {}
+    for week, players in by_week.items():
+        players.sort(key=lambda p: p[1], reverse=True)
+        replacement_score = players[n][1] if len(players) > n else 0
+        for player_id, pts in players:
+            par.setdefault(player_id, {})[week] = max(0.0, pts - replacement_score)
+    return par
 
 def is_current_season(db, league):
     """A league is the active one in its dynasty history if nothing has

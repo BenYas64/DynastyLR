@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
-from scoring import scoring_expression, NON_STAT_COLUMNS
+from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par
 
 app = FastAPI()
 
@@ -52,6 +52,7 @@ def player_to_dict(player):
 CACHE_TTL_SECONDS = 3600
 _points_cache = {}
 _position_rank_cache = {}
+_par_cache = {}
 
 def season_points(db, league, season):
     """Per-player summed points for the season. Cached in-process, since stats only
@@ -97,6 +98,21 @@ def position_week_ranks(db, league, season, position):
         ranks.setdefault(player_id, {})[week] = rank
     _position_rank_cache[cache_key] = {"computed_at": now, "ranks": ranks}
     return ranks
+
+def cached_position_week_par(db, league, season, position):
+    """Same caching shape as position_week_ranks, for
+    scoring.position_week_par - keyed by league too (unlike ranks, PAR
+    depends on the league's scoring AND roster construction, not just
+    scoring)."""
+    cache_key = (league.league_id if league else None, season, position)
+    cached = _par_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
+        return cached["par"]
+
+    par = position_week_par(db, league, season, position)
+    _par_cache[cache_key] = {"computed_at": now, "par": par}
+    return par
 
 @app.get("/players/browse")
 def browse_players(
@@ -197,6 +213,22 @@ def get_weekly_rank(league_id: str, player_id: str, season: int, db: Session = D
         return {}
     ranks = position_week_ranks(db, league, season, player.position)
     return ranks.get(player_id, {})
+
+@app.get("/league/{league_id}/players/{player_id}/points-above-replacement/{season}")
+def get_points_above_replacement(league_id: str, player_id: str, season: int, db: Session = Depends(get_db)):
+    """Per-week points above replacement for this player, under this
+    league's actual scoring and roster construction - see
+    scoring.position_week_par for the methodology."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    player = db.query(Player).filter(Player.player_id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if not player.position:
+        return {}
+    par = cached_position_week_par(db, league, season, player.position)
+    return par.get(player_id, {})
 
 @app.get("/league/{league_id}/players/{player_id}/stat-breakdown/{week}")
 def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = Depends(get_db)):
