@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
-from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par
+from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts
 
 app = FastAPI()
 
@@ -294,6 +294,30 @@ def get_points_above_replacement_totals(league_id: str, season: int, ids: str, d
             par_by_position[position] = cached_position_week_par(db, league, season, position)
         totals[player_id] = sum(par_by_position[position].get(player_id, {}).values())
     return totals
+
+@app.get("/league/{league_id}/players/points-above-replacement-rank/{season}")
+def get_points_above_replacement_rank(league_id: str, season: int, ids: str, db: Session = Depends(get_db)):
+    """Overall PAR rank for a season, combined across every PAR-eligible
+    position (QB/RB/WR/TE together, not within one position) - lets the
+    draft page color a pick by how many other draftable players that
+    season's PAR actually outscored, not an arbitrary rate cutoff. A
+    player with no PAR data at all that season (never recorded a stat at
+    any of those positions) gets no rank, i.e. below everyone who has one."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return {}
+
+    totals = []
+    for position in replacement_starter_counts(league):
+        par = cached_position_week_par(db, league, season, position)
+        totals.extend((player_id, sum(weekly.values())) for player_id, weekly in par.items())
+    totals.sort(key=lambda t: t[1], reverse=True)
+
+    rank = {player_id: i + 1 for i, (player_id, _) in enumerate(totals)}
+    return {player_id: rank.get(player_id) for player_id in id_list}
 
 @app.get("/league/{league_id}/players/{player_id}/stat-breakdown/{week}")
 def get_stat_breakdown(league_id: str, player_id: str, week: int, db: Session = Depends(get_db)):
