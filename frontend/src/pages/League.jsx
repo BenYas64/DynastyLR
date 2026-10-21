@@ -213,7 +213,7 @@ export default function League() {
       <h2 style={{ marginTop: '30px' }}>League Standings</h2>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: '#f0f0f0' }}>
+          <tr style={{ background: '#1c15f1' }}>
             <th style={{ padding: '10px', textAlign: 'left' }}>Rank</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
             <th style={{ padding: '10px', textAlign: 'center' }}>W</th>
