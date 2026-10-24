@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
-from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts
+from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts, rescaled_trade_values
 
 app = FastAPI()
 
@@ -53,6 +53,7 @@ CACHE_TTL_SECONDS = 3600
 _points_cache = {}
 _position_rank_cache = {}
 _par_cache = {}
+_value_cache = {}
 
 def season_points(db, league, season):
     """Per-player summed points for the season. Cached in-process, since stats only
@@ -113,6 +114,21 @@ def cached_position_week_par(db, league, season, position):
     par = position_week_par(db, league, season, position)
     _par_cache[cache_key] = {"computed_at": now, "par": par}
     return par
+
+def cached_rescaled_trade_values(db, league, is_dynasty, value_ppr, value_tep):
+    """Same caching shape as cached_position_week_par, for
+    scoring.rescaled_trade_values - keyed by league (roster shape and
+    size), dynasty vs. redraft, and the ppr/tep slice, since all four
+    change which FantasyCalc values get pulled and how they're rebaselined."""
+    cache_key = (league.league_id if league else None, is_dynasty, value_ppr, value_tep)
+    cached = _value_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
+        return cached["values"]
+
+    values = rescaled_trade_values(db, league, is_dynasty, value_ppr, value_tep)
+    _value_cache[cache_key] = {"computed_at": now, "values": values}
+    return values
 
 @app.get("/players/browse")
 def browse_players(
@@ -179,6 +195,12 @@ def get_player_values(ids: str, league_id: str | None = None, db: Session = Depe
     value_tep = league.value_tep if league and league.value_tep is not None else 0.0
     include_dynasty = bool(league and league.league_type == "dynasty")
 
+    # redraft_value/dynasty_value are this league's own rebaselined scale
+    # (see scoring.rescaled_trade_values), not FantasyCalc's raw number -
+    # position_rank is untouched, still FantasyCalc's own per-position rank.
+    redraft_values = cached_rescaled_trade_values(db, league, False, value_ppr, value_tep)
+    dynasty_values = cached_rescaled_trade_values(db, league, True, value_ppr, value_tep) if include_dynasty else {}
+
     rows = db.query(PlayerValue).filter(
         PlayerValue.player_id.in_(id_list),
         PlayerValue.ppr == value_ppr,
@@ -195,10 +217,10 @@ def get_player_values(ids: str, league_id: str | None = None, db: Session = Depe
     for row in rows:
         entry = result[row.player_id]
         if not row.is_dynasty:
-            entry["redraft_value"] = row.value
+            entry["redraft_value"] = redraft_values.get(row.player_id)
             entry["redraft_position_rank"] = row.position_rank
         elif include_dynasty:
-            entry["dynasty_value"] = row.value
+            entry["dynasty_value"] = dynasty_values.get(row.player_id)
             entry["dynasty_position_rank"] = row.position_rank
     return result
 
@@ -231,12 +253,18 @@ def get_player(player_id: str, league_id: str | None = None, db: Session = Depen
     redraft = value_for(False)
     dynasty = value_for(True) if league and league.league_type == "dynasty" else None
 
+    # redraft_value/dynasty_value are this league's own rebaselined scale
+    # (see scoring.rescaled_trade_values), not FantasyCalc's raw number -
+    # position_rank is untouched, still FantasyCalc's own per-position rank.
+    redraft_value = cached_rescaled_trade_values(db, league, False, value_ppr, value_tep).get(player_id) if redraft else None
+    dynasty_value = cached_rescaled_trade_values(db, league, True, value_ppr, value_tep).get(player_id) if dynasty else None
+
     return {
         "player": player,
         "stats": stats,
-        "redraft_value": redraft.value if redraft else None,
+        "redraft_value": redraft_value,
         "redraft_position_rank": redraft.position_rank if redraft else None,
-        "dynasty_value": dynasty.value if dynasty else None,
+        "dynasty_value": dynasty_value,
         "dynasty_position_rank": dynasty.position_rank if dynasty else None,
     }
 
@@ -641,6 +669,12 @@ def update_roster_positions(league_id: str, payload: RosterPositionsUpdate, db: 
 
     league.roster_positions = json.dumps(new_positions)
     db.commit()
+
+    # Rescaled trade values are baselined against roster_positions'
+    # starter count (see scoring.value_baseline_rank) - without this
+    # they'd keep serving values computed under the old roster shape.
+    for key in [k for k in _value_cache if k[0] == league_id]:
+        del _value_cache[key]
 
     return {"league_id": league_id, "roster_positions": new_positions}
 

@@ -1,7 +1,7 @@
 import json
 from statistics import median
 from sqlalchemy import func
-from database import Stat, Roster, Matchup, League, Player
+from database import Stat, Roster, Matchup, League, Player, PlayerValue
 
 NON_STAT_COLUMNS = {"player_id", "season", "week", "season_type", "team", "opponent"}
 
@@ -88,6 +88,60 @@ def position_week_par(db, league, season, position, model=Stat):
         for player_id, pts in players:
             par.setdefault(player_id, {})[week] = max(0.0, pts - replacement_score)
     return par
+
+# Positions FantasyCalc actually rates for trade value - a K or DEF never
+# has a PlayerValue row, so there's nothing to rescale for them anyway.
+VALUE_POSITIONS = ("QB", "RB", "WR", "TE")
+
+def value_baseline_rank(league, is_dynasty):
+    """Combined QB/RB/WR/TE rank used as this league's trade-value
+    baseline - total non-bench/IR starting slots league-wide, times 5/3
+    for dynasty or 4/3 for redraft. Same idea as replacement_starter_counts
+    (a deliberately-past-the-starters cutoff), but for trade value instead
+    of weekly scoring, and not split by position - one combined pool."""
+    if not league or not league.roster_positions:
+        return None
+    positions = json.loads(league.roster_positions)
+    starters_per_team = sum(1 for slot in positions if slot not in ("BN", "IR"))
+    total_starters = starters_per_team * (league.total_rosters or 12)
+    return round(total_starters * (5 / 3 if is_dynasty else 4 / 3))
+
+def rescaled_trade_values(db, league, is_dynasty, value_ppr, value_tep):
+    """Rebaselines one league's dynasty/redraft trade values (see
+    database.PlayerValue) against its own size and format, since
+    FantasyCalc's raw numbers mean nothing on their own without knowing
+    how deep a league's starting lineups actually run - computed live
+    rather than stored, same reasoning as PAR. 0 is set at the value of
+    the player ranked at value_baseline_rank; the single best player is
+    set to 9999; everyone below 0 is clamped to 0."""
+    rank_cutoff = value_baseline_rank(league, is_dynasty)
+    if not rank_cutoff:
+        return {}
+
+    rows = (
+        db.query(PlayerValue.player_id, PlayerValue.value)
+        .join(Player, Player.player_id == PlayerValue.player_id)
+        .filter(
+            PlayerValue.is_dynasty == is_dynasty,
+            PlayerValue.ppr == value_ppr,
+            PlayerValue.tep == value_tep,
+            Player.position.in_(VALUE_POSITIONS),
+        )
+        .all()
+    )
+    if not rows:
+        return {}
+
+    ranked = sorted(rows, key=lambda r: r[1] or 0, reverse=True)
+    baseline = (ranked[rank_cutoff - 1][1] or 0) if len(ranked) >= rank_cutoff else 0
+    shifted = {player_id: (value or 0) - baseline for player_id, value in ranked}
+
+    max_shifted = max(shifted.values())
+    if max_shifted <= 0:
+        return {player_id: 0 for player_id in shifted}
+
+    scale = 9899 / max_shifted
+    return {player_id: max(0, round(v * scale + 100)) for player_id, v in shifted.items()}
 
 def is_current_season(db, league):
     """A league is the active one in its dynasty history if nothing has
