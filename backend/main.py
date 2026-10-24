@@ -136,6 +136,11 @@ def browse_players(
     league_id: str | None = None,
     available_only: bool = False,
     season: int = 2026,
+    position: str | None = None,
+    team: str | None = None,
+    injury_status: str | None = None,
+    sort_by: str = "points",
+    sort_dir: str = "desc",
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -153,6 +158,29 @@ def browse_players(
         if eligible:
             query = query.filter(or_(*[Player.fantasy_positions.ilike(f'%"{pos}"%') for pos in eligible]))
 
+    if position:
+        positions = [p for p in position.split(",") if p]
+        if positions:
+            query = query.filter(Player.position.in_(positions))
+
+    if team:
+        teams = [t for t in team.split(",") if t]
+        if teams:
+            query = query.filter(Player.team.in_(teams))
+
+    if injury_status:
+        # "Active" isn't a real stored value - it's NULL or '' in the
+        # column, same fallback the player detail view already displays.
+        statuses = [s for s in injury_status.split(",") if s]
+        conditions = []
+        real_statuses = [s for s in statuses if s != "Active"]
+        if "Active" in statuses:
+            conditions.append(or_(Player.injury_status.is_(None), Player.injury_status == ""))
+        if real_statuses:
+            conditions.append(Player.injury_status.in_(real_statuses))
+        if conditions:
+            query = query.filter(or_(*conditions))
+
     if available_only and league_id:
         rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
         rostered_ids = set()
@@ -162,22 +190,67 @@ def browse_players(
         if rostered_ids:
             query = query.filter(Player.player_id.notin_(rostered_ids))
 
+    candidates = query.all()
+
     points = season_points(db, league, season)
 
-    ranked = sorted(
-        query.all(),
-        key=lambda p: points.get(p.player_id, 0),
-        reverse=True,
-    )
+    # Same rescaled values shown on the player detail/draft pages (see
+    # scoring.rescaled_trade_values) - computed once for every candidate
+    # here so both the table and the sort-by-value/rank options use the
+    # same numbers, not FantasyCalc's raw scale.
+    value_ppr = league.value_ppr if league and league.value_ppr is not None else 0.5
+    value_tep = league.value_tep if league and league.value_tep is not None else 0.0
+    include_dynasty = bool(league and league.league_type == "dynasty")
+
+    redraft_values = cached_rescaled_trade_values(db, league, False, value_ppr, value_tep)
+    dynasty_values = cached_rescaled_trade_values(db, league, True, value_ppr, value_tep) if include_dynasty else {}
+
+    value_rows = db.query(PlayerValue.player_id, PlayerValue.is_dynasty, PlayerValue.position_rank).filter(
+        PlayerValue.ppr == value_ppr, PlayerValue.tep == value_tep,
+    ).all()
+    redraft_ranks = {player_id: rank for player_id, is_dynasty, rank in value_rows if not is_dynasty}
+    dynasty_ranks = {player_id: rank for player_id, is_dynasty, rank in value_rows if is_dynasty}
+
+    # A missing rank sorts as worse than every real one in both
+    # directions (last under ascending "best first", first under
+    # descending "worst first") - same idea as PAR ranking an
+    # unranked player below everyone with a real rank.
+    SORT_KEYS = {
+        "points": lambda p: points.get(p.player_id, 0) or 0,
+        "age": lambda p: p.age if p.age is not None else -1,
+        "redraft_value": lambda p: redraft_values.get(p.player_id, 0) or 0,
+        "redraft_rank": lambda p: redraft_ranks.get(p.player_id) or 999999,
+        "dynasty_value": lambda p: dynasty_values.get(p.player_id, 0) or 0,
+        "dynasty_rank": lambda p: dynasty_ranks.get(p.player_id) or 999999,
+    }
+    sort_key = SORT_KEYS.get(sort_by, SORT_KEYS["points"])
+    ranked = sorted(candidates, key=sort_key, reverse=(sort_dir != "asc"))
 
     total = len(ranked)
     page = []
     for player in ranked[offset:offset + limit]:
         data = player_to_dict(player)
         data["points"] = points.get(player.player_id, 0)
+        data["redraft_value"] = redraft_values.get(player.player_id)
+        data["redraft_position_rank"] = redraft_ranks.get(player.player_id)
+        data["dynasty_value"] = dynasty_values.get(player.player_id) if include_dynasty else None
+        data["dynasty_position_rank"] = dynasty_ranks.get(player.player_id) if include_dynasty else None
         page.append(data)
 
     return {"total": total, "players": page}
+
+@app.get("/players/filter-options")
+def get_player_filter_options(db: Session = Depends(get_db)):
+    """Distinct position/team/injury-status values actually present among
+    active players, for the players page's filter dropdowns - computed
+    live rather than hardcoded, since guessing team abbreviations (a
+    relocated franchise, a legacy code like 'OAK' still on old rows) or
+    every position Sleeper tracks (offensive line splits, IDP, etc.) is
+    exactly the kind of thing that quietly goes stale."""
+    positions = sorted(p for (p,) in db.query(Player.position).filter(Player.active == True, Player.position.isnot(None)).distinct().all() if p)
+    teams = sorted(t for (t,) in db.query(Player.team).filter(Player.active == True, Player.team.isnot(None)).distinct().all() if t)
+    statuses = sorted(s for (s,) in db.query(Player.injury_status).filter(Player.active == True, Player.injury_status.isnot(None)).distinct().all() if s)
+    return {"positions": positions, "teams": teams, "injury_statuses": statuses}
 
 @app.get("/players/values")
 def get_player_values(ids: str, league_id: str | None = None, db: Session = Depends(get_db)):
