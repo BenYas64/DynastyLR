@@ -152,8 +152,27 @@ export default function RookieDraftAnalytics() {
       dynastyValue: rookieValues[pick.playerId]?.dynasty_value,
       yearPar: years.map(year => rookiePar[year]?.[pick.playerId]),
       yearRank: years.map(year => rookieRank[year]?.[pick.playerId]),
-      pickValue: pickValue(pick.pickNo),
+      basePickValue: pickValue(pick.pickNo),
     }
+  })
+
+  // Pick values stay proportional to the base curve (pick 1 is always
+  // twice pick 8, no matter the year) but get uniformly scaled per draft
+  // class so that class's pick values sum to exactly that class's total
+  // 3Yr Score - a class with a lot of combined value gets inflated pick
+  // values relative to the base curve, a weak class gets deflated ones.
+  // Needs every pick in the class scored before it means anything, so a
+  // class with any pick still loading shows '...' across the board.
+  const rowsBySeason = {}
+  rows.forEach(r => {
+    (rowsBySeason[r.season] ??= []).push(r)
+  })
+  Object.values(rowsBySeason).forEach(classRows => {
+    const allScored = classRows.every(r => r.score != null)
+    const totalBase = classRows.reduce((sum, r) => sum + r.basePickValue, 0)
+    const totalScore = classRows.reduce((sum, r) => sum + r.score, 0)
+    const scale = allScored && totalBase > 0 ? totalScore / totalBase : null
+    classRows.forEach(r => { r.pickValue = scale != null ? r.basePickValue * scale : null })
   })
 
   const SORT_KEYS = {
@@ -213,6 +232,9 @@ export default function RookieDraftAnalytics() {
       <p style={{ color: '#666', fontSize: '14px' }}>
         Every rookie-draft pick in this league's history ({rows.length} picks). 3Yr Score averages a player's
         first 3 seasons' PAR, filling in any season not fully played yet from their current dynasty value.
+        Pick Value follows a fixed curve by pick number (pick 1 is always twice pick 8) scaled per draft
+        class so that class's pick values add up to its total 3Yr Score - a stronger class's picks are worth
+        more than the same slot in a weaker one.
       </p>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
@@ -265,7 +287,7 @@ export default function RookieDraftAnalytics() {
               {yearCell(row, 2)}
               <td style={{ padding: '10px' }}>{row.dynastyValue ?? '-'}</td>
               <td style={{ padding: '10px' }}>{row.score != null ? row.score.toFixed(1) : '...'}</td>
-              <td style={{ padding: '10px' }}>{row.pickValue != null ? row.pickValue.toFixed(1) : '-'}</td>
+              <td style={{ padding: '10px' }}>{row.pickValue != null ? row.pickValue.toFixed(1) : '...'}</td>
             </tr>
           ))}
         </tbody>
