@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
+import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 import { CURRENT_SEASON, threeYearDraftScore } from '../rookieScore.js'
 
 const API = 'https://api.dynastylr.site'
@@ -35,18 +36,37 @@ export default function RookieDraftAnalytics() {
     fetch(`${API}/league/${selectedLeagueId}/history`)
       .then(r => r.json())
       .then(history => Promise.all(history.map(h =>
-        fetch(`${API}/league/${h.league_id}/draft`).then(r => r.json())
-          .then(picks => ({ season: h.season, leagueId: h.league_id, picks }))
+        Promise.all([
+          fetch(`${API}/league/${h.league_id}/draft`).then(r => r.json()),
+          fetch(`${API}/league/${h.league_id}/rosters`).then(r => r.json()),
+          fetch(`${API}/league/${h.league_id}/users`).then(r => r.json()),
+        ]).then(([picks, rosters, users]) => ({ season: h.season, leagueId: h.league_id, picks, rosters, users }))
       )))
       .then(seasons => {
         const picks = []
         const allPlayerIds = new Set()
         const seasonToLeagueId = {}
-        seasons.forEach(({ season, leagueId, picks: seasonPicks }) => {
+        seasons.forEach(({ season, leagueId, picks: seasonPicks, rosters, users }) => {
           seasonToLeagueId[season] = leagueId
+
+          // roster_id is only meaningful within its own season's league -
+          // resolve it to a team name now, using that same season's own
+          // rosters/users, rather than carrying every season's rosters
+          // around for a render-time lookup.
+          const userById = {}
+          users.forEach(u => { userById[u.user_id] = u })
+          const rosterById = {}
+          rosters.forEach(r => { rosterById[r.roster_id] = r })
+
           seasonPicks.forEach(p => {
             if (p.draft_type === 'rookie' && p.player_id) {
-              picks.push({ season, pickNo: p.pick_no, playerId: p.player_id })
+              const roster = rosterById[p.roster_id]
+              const user = roster ? userById[roster.owner_id] : null
+              picks.push({
+                season, pickNo: p.pick_no, playerId: p.player_id,
+                team: roster ? teamName(user) : null,
+                teamAvatar: roster ? teamAvatarUrl(user) : null,
+              })
               allPlayerIds.add(p.player_id)
             }
           })
@@ -120,12 +140,15 @@ export default function RookieDraftAnalytics() {
   const SORT_KEYS = {
     season: r => r.season,
     pickNo: r => r.pickNo,
+    team: r => r.team || '',
     score: r => r.score ?? -Infinity,
     pickValue: r => r.pickValue ?? -Infinity,
   }
   const sortKey = SORT_KEYS[sortBy] || SORT_KEYS.score
   const sorted = [...rows].sort((a, b) => {
-    const diff = sortKey(a) - sortKey(b)
+    const ka = sortKey(a)
+    const kb = sortKey(b)
+    const diff = typeof ka === 'string' ? ka.localeCompare(kb) : ka - kb
     return sortDir === 'asc' ? diff : -diff
   })
 
@@ -154,6 +177,9 @@ export default function RookieDraftAnalytics() {
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('season')}>
               Draft{sortArrow('season')}
             </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('team')}>
+              Drafted By{sortArrow('team')}
+            </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('score')}>
               3Yr Score{sortArrow('score')}
             </th>
@@ -173,6 +199,10 @@ export default function RookieDraftAnalytics() {
                 {row.player ? `${row.player.first_name} ${row.player.last_name} - ${row.player.position}` : `Player ${row.playerId}`}
               </td>
               <td style={{ padding: '10px' }}>{row.season} Pick {row.pickNo}</td>
+              <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {row.teamAvatar && <img src={row.teamAvatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />}
+                {row.team || 'Unknown'}
+              </td>
               <td style={{ padding: '10px' }}>{row.score != null ? row.score.toFixed(1) : '...'}</td>
               <td style={{ padding: '10px' }}>{row.pickValue ?? '-'}</td>
             </tr>
