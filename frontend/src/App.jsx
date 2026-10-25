@@ -10,6 +10,7 @@ import MyTeam from './pages/MyTeam.jsx'
 import MyMatchup from './pages/MyMatchup.jsx'
 import HeadToHead from './pages/HeadToHead.jsx'
 import Draft from './pages/Draft.jsx'
+import RookieDraftAnalytics from './pages/RookieDraftAnalytics.jsx'
 import Players from './pages/Players.jsx'
 import Account from './pages/Account.jsx'
 import TeamRoster from './pages/TeamRoster.jsx'
@@ -47,6 +48,7 @@ function Nav() {
       <Link to="/matchup" style={{ color: '#ccc', textDecoration: 'none' }}>My Matchup</Link>
       <Link to="/head-to-head" style={{ color: '#ccc', textDecoration: 'none' }}>Head-to-Head</Link>
       <Link to="/draft" style={{ color: '#ccc', textDecoration: 'none' }}>Draft</Link>
+      <Link to="/rookie-analytics" style={{ color: '#ccc', textDecoration: 'none' }}>Rookie Analytics</Link>
       <Link to="/league-settings" style={{ color: '#ccc', textDecoration: 'none' }}>League Settings</Link>
       <Link to="/my-team" style={{ color: '#ccc', textDecoration: 'none' }}>My Team</Link>
       <Link to="/players" style={{ color: '#ccc', textDecoration: 'none' }}>Players</Link>
@@ -68,6 +70,7 @@ function AppRoutes() {
         <Route path="/matchup" element={<MyMatchup />} />
         <Route path="/head-to-head" element={<HeadToHead />} />
         <Route path="/draft" element={<Draft />} />
+        <Route path="/rookie-analytics" element={<RookieDraftAnalytics />} />
         <Route path="/league/:leagueId/matchup/:week/:rosterId" element={<MyMatchup />} />
         <Route path="/league-settings" element={<LeagueSettings />} />
         <Route path="/league-settings/scoring" element={<ScoringSettings />} />
