@@ -2,27 +2,9 @@ import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
-import { CURRENT_SEASON, threeYearDraftScore } from '../rookieScore.js'
+import { CURRENT_SEASON, threeYearDraftScore, parRankColor } from '../rookieScore.js'
 
 const API = 'https://api.dynastylr.site'
-
-// PAR rank tiers, same 4-color language as the weekly rank coloring on the
-// individual player page - but ranked overall across every PAR-eligible
-// position (QB/RB/WR/TE together) for that season, not a rate cutoff.
-// No rank at all (never recorded a stat at any of those positions that
-// season) is worse than every real rank, so it falls through to Red too.
-const PAR_RANK_TIERS = [12, 48, 120]
-const PAR_RANK_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626']
-
-function parRankColor(rank) {
-  if (rank === undefined) return null
-  const r = rank ?? Infinity
-  const [tier1, tier2, tier3] = PAR_RANK_TIERS
-  if (r <= tier1) return PAR_RANK_COLORS[0]
-  if (r <= tier2) return PAR_RANK_COLORS[1]
-  if (r <= tier3) return PAR_RANK_COLORS[2]
-  return PAR_RANK_COLORS[3]
-}
 
 export default function Draft() {
   const { selectedLeagueId } = useAccount()

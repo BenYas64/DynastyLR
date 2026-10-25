@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
-import { CURRENT_SEASON, threeYearDraftScore } from '../rookieScore.js'
+import { CURRENT_SEASON, threeYearDraftScore, parRankColor } from '../rookieScore.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -12,6 +12,10 @@ export default function RookieDraftAnalytics() {
   const [rookiePicks, setRookiePicks] = useState([])
   const [players, setPlayers] = useState({})
   const [rookiePar, setRookiePar] = useState({})
+  // { [season]: { [player_id]: overallRank } } - same overall PAR rank
+  // (across every PAR-eligible position) used to color the draft page's
+  // PAR badges.
+  const [rookieRank, setRookieRank] = useState({})
   const [rookieValues, setRookieValues] = useState({})
   const [currentNflWeek, setCurrentNflWeek] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -99,10 +103,15 @@ export default function RookieDraftAnalytics() {
               .then(r => r.json())
               .then(totals => ({ season, totals }))
           )),
+          Promise.all(parSeasons.map(season =>
+            fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-rank/${season}?ids=${ids.join(',')}`)
+              .then(r => r.json())
+              .then(ranks => ({ season, ranks }))
+          )),
           selectedLeagueId
             ? fetch(`${API}/players/values?ids=${ids.join(',')}&league_id=${selectedLeagueId}`).then(r => r.json())
             : Promise.resolve({}),
-        ]).then(([playersData, parResults, values]) => {
+        ]).then(([playersData, parResults, rankResults, values]) => {
           const playersMap = {}
           playersData.forEach(p => playersMap[p.player_id] = p)
           setPlayers(playersMap)
@@ -110,6 +119,10 @@ export default function RookieDraftAnalytics() {
           const parMap = {}
           parResults.forEach(({ season, totals }) => { parMap[season] = totals })
           setRookiePar(parMap)
+
+          const rankMap = {}
+          rankResults.forEach(({ season, ranks }) => { rankMap[season] = ranks })
+          setRookieRank(rankMap)
 
           setRookieValues(values)
           setLoading(false)
@@ -130,17 +143,27 @@ export default function RookieDraftAnalytics() {
   if (loading) return <p style={{ padding: '20px' }}>Loading rookie draft analytics...</p>
   if (error) return <p style={{ padding: '20px', color: 'red' }}>Error: {error}</p>
 
-  const rows = rookiePicks.map(pick => ({
-    ...pick,
-    player: players[pick.playerId],
-    score: threeYearDraftScore(rookiePar, rookieValues, currentNflWeek, pick.season, pick.playerId),
-    pickValue: null, // not computed yet
-  }))
+  const rows = rookiePicks.map(pick => {
+    const years = [pick.season, pick.season + 1, pick.season + 2]
+    return {
+      ...pick,
+      player: players[pick.playerId],
+      score: threeYearDraftScore(rookiePar, rookieValues, currentNflWeek, pick.season, pick.playerId),
+      dynastyValue: rookieValues[pick.playerId]?.dynasty_value,
+      yearPar: years.map(year => rookiePar[year]?.[pick.playerId]),
+      yearRank: years.map(year => rookieRank[year]?.[pick.playerId]),
+      pickValue: null, // not computed yet
+    }
+  })
 
   const SORT_KEYS = {
     season: r => r.season,
     pickNo: r => r.pickNo,
     team: r => r.team || '',
+    year1: r => r.yearPar[0] ?? -Infinity,
+    year2: r => r.yearPar[1] ?? -Infinity,
+    year3: r => r.yearPar[2] ?? -Infinity,
+    dynastyValue: r => r.dynastyValue ?? -Infinity,
     score: r => r.score ?? -Infinity,
     pickValue: r => r.pickValue ?? -Infinity,
   }
@@ -162,6 +185,28 @@ export default function RookieDraftAnalytics() {
   }
   const sortArrow = (field) => sortBy === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''
 
+  // Each row's "year 1/2/3" is relative to ITS OWN draft season, not a
+  // shared absolute year like the draft page's columns - a season past
+  // CURRENT_SEASON hasn't happened at all yet ('-'), one that has but
+  // whose PAR hasn't loaded shows '...' rather than a wrong placeholder.
+  const yearCell = (row, i) => {
+    const year = row.season + i
+    const total = row.yearPar[i]
+    const rank = row.yearRank[i]
+    const background = parRankColor(rank)
+    const label = year > CURRENT_SEASON ? '-' : (total != null ? total.toFixed(1) : '...')
+    return (
+      <td style={{ padding: '10px' }}>
+        <span
+          title={rank != null ? `${total.toFixed(1)} PAR, rank #${rank} overall, ${year}` : `${year}`}
+          style={{ color: '#fff', background, padding: background ? '2px 6px' : 0, borderRadius: '4px' }}
+        >
+          {label}
+        </span>
+      </td>
+    )
+  }
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Rookie Draft Analytics</h2>
@@ -179,6 +224,18 @@ export default function RookieDraftAnalytics() {
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('team')}>
               Drafted By{sortArrow('team')}
+            </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('year1')}>
+              Year 1 PAR{sortArrow('year1')}
+            </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('year2')}>
+              Year 2 PAR{sortArrow('year2')}
+            </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('year3')}>
+              Year 3 PAR{sortArrow('year3')}
+            </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('dynastyValue')}>
+              Dynasty Value{sortArrow('dynastyValue')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('score')}>
               3Yr Score{sortArrow('score')}
@@ -203,6 +260,10 @@ export default function RookieDraftAnalytics() {
                 {row.teamAvatar && <img src={row.teamAvatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />}
                 {row.team || 'Unknown'}
               </td>
+              {yearCell(row, 0)}
+              {yearCell(row, 1)}
+              {yearCell(row, 2)}
+              <td style={{ padding: '10px' }}>{row.dynastyValue ?? '-'}</td>
               <td style={{ padding: '10px' }}>{row.score != null ? row.score.toFixed(1) : '...'}</td>
               <td style={{ padding: '10px' }}>{row.pickValue ?? '-'}</td>
             </tr>
