@@ -165,13 +165,16 @@ export default function Draft() {
   // each season treated as 17 weeks whether that many have actually
   // happened yet or not. A season already fully played uses its real PAR
   // total as-is. The season still in progress (or one that hasn't started
-  // at all) fills in whichever of its 17 weeks haven't happened with a
-  // stand-in weekly value derived from current dynasty value (dynasty
-  // rating / 9999 * 200) - an estimate of what a typical week "should"
-  // produce for a player of that market value, not a real result.
+  // at all) fills in the remaining-weeks fraction of its total from a
+  // stand-in FULL-SEASON value derived from current dynasty value
+  // (dynasty rating / 9999 * 200) - an estimate of what a typical season
+  // "should" produce for a player of that market value, not a real
+  // result. A season with no real weeks played yet gets 100% of that
+  // substitute; one that's n/17 weeks in gets its real total plus
+  // (17-n)/17 of it.
   const threeYearDraftScore = (draftSeason, playerId) => {
     const dynastyValue = rookieValues[playerId]?.dynasty_value ?? 0
-    const substitutedWeekly = dynastyValue / 9999 * 200
+    const substitutedSeasonValue = dynastyValue / 9999 * 200
 
     let total = 0
     for (const year of [draftSeason, draftSeason + 1, draftSeason + 2]) {
@@ -191,7 +194,7 @@ export default function Draft() {
       }
 
       const remainingWeeks = WEEKS_PER_SEASON - weeksCompleted
-      total += realTotal + remainingWeeks * substitutedWeekly
+      total += realTotal + (remainingWeeks / WEEKS_PER_SEASON) * substitutedSeasonValue
     }
     return total / 3
   }
