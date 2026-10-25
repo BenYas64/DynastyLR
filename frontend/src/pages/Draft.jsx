@@ -6,6 +6,11 @@ import { teamName, teamAvatarUrl } from '../teamDisplay.js'
 const API = 'https://api.dynastylr.site'
 const CURRENT_SEASON = 2026
 
+// No league here plays a week 18 (see scoring.position_week_par on the
+// backend), so every season is treated as 17 weeks for the 3-year score
+// below, real or substituted.
+const WEEKS_PER_SEASON = 17
+
 // PAR rank tiers, same 4-color language as the weekly rank coloring on the
 // individual player page - but ranked overall across every PAR-eligible
 // position (QB/RB/WR/TE together) for that season, not a rate cutoff.
@@ -43,6 +48,17 @@ export default function Draft() {
   const [rookieRank, setRookieRank] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Sleeper's "week currently being played" - needed to know how many of
+  // the in-progress season's weeks are real vs. still substituted, for
+  // the 3-year score below.
+  const [currentNflWeek, setCurrentNflWeek] = useState(null)
+
+  useEffect(() => {
+    fetch(`${API}/current-week`)
+      .then(r => r.json())
+      .then(d => setCurrentNflWeek(d.week))
+      .catch(() => {})
+  }, [])
 
   // One dropdown entry per actual draft across every season in this
   // league's history, not per season - a season can have more than one
@@ -145,6 +161,41 @@ export default function Draft() {
     ? [selected.season, selected.season + 1, selected.season + 2].filter(s => s <= CURRENT_SEASON && seasonToLeagueId[s])
     : []
 
+  // 3-year draft score: average of the player's first 3 seasons' PAR,
+  // each season treated as 17 weeks whether that many have actually
+  // happened yet or not. A season already fully played uses its real PAR
+  // total as-is. The season still in progress (or one that hasn't started
+  // at all) fills in whichever of its 17 weeks haven't happened with a
+  // stand-in weekly value derived from current dynasty value (dynasty
+  // rating / 9999 * 200) - an estimate of what a typical week "should"
+  // produce for a player of that market value, not a real result.
+  const threeYearDraftScore = (draftSeason, playerId) => {
+    const dynastyValue = rookieValues[playerId]?.dynasty_value ?? 0
+    const substitutedWeekly = dynastyValue / 9999 * 200
+
+    let total = 0
+    for (const year of [draftSeason, draftSeason + 1, draftSeason + 2]) {
+      let weeksCompleted
+      if (year < CURRENT_SEASON) weeksCompleted = WEEKS_PER_SEASON
+      else if (year > CURRENT_SEASON) weeksCompleted = 0
+      else {
+        if (currentNflWeek == null) return null
+        weeksCompleted = Math.min(WEEKS_PER_SEASON, Math.max(currentNflWeek - 1, 0))
+      }
+
+      let realTotal = 0
+      if (year <= CURRENT_SEASON) {
+        const seasonPar = rookiePar[year]
+        if (!seasonPar) return null
+        realTotal = seasonPar[playerId] ?? 0
+      }
+
+      const remainingWeeks = WEEKS_PER_SEASON - weeksCompleted
+      total += realTotal + remainingWeeks * substitutedWeekly
+    }
+    return total / 3
+  }
+
   useEffect(() => {
     if (!selected || selected.draftType !== 'rookie') return
     const ids = [...new Set(selected.picks.map(p => p.player_id).filter(Boolean))]
@@ -230,7 +281,7 @@ export default function Draft() {
       {Object.keys(byRound).map(Number).sort((a, b) => a - b).map(round => (
         <div key={round} style={{ marginBottom: '16px' }}>
           <p style={{ color: '#666', fontWeight: 'bold', margin: '0 0 6px' }}>Round {round}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: selected.draftType === 'rookie' ? '900px' : '600px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: selected.draftType === 'rookie' ? '1050px' : '600px' }}>
             {byRound[round].map(pick => {
               const player = players[pick.player_id]
               const team = teamFor(pick.roster_id)
@@ -275,6 +326,17 @@ export default function Draft() {
                       <span style={{ color: '#666', fontSize: '13px', minWidth: '90px', textAlign: 'right' }}>
                         Dynasty: {rookieValues[pick.player_id]?.dynasty_value ?? '-'}
                       </span>
+                      {(() => {
+                        const score = threeYearDraftScore(selected.season, pick.player_id)
+                        return (
+                          <span
+                            title="Average PAR across this player's first 3 seasons - any season not fully played yet has its remaining weeks filled in from current dynasty value"
+                            style={{ color: '#666', fontSize: '13px', minWidth: '100px', textAlign: 'right', fontWeight: 'bold' }}
+                          >
+                            3Yr Score: {score != null ? score.toFixed(1) : '...'}
+                          </span>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
