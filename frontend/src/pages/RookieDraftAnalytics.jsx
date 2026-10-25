@@ -6,6 +6,70 @@ import { CURRENT_SEASON, threeYearDraftScore, parRankColor, pickValue } from '..
 
 const API = 'https://api.dynastylr.site'
 
+// Plain inline SVG, no charting library - this is a simple fixed-axes
+// scatter plot (pick value vs. 3Yr score) and didn't seem worth adding a
+// new dependency for, especially one the Pi would need `npm install`-ed.
+function ScatterChart({ points, onPointClick }) {
+  if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
+
+  const width = 700
+  const height = 400
+  const padding = { left: 55, right: 20, top: 16, bottom: 45 }
+  const plotW = width - padding.left - padding.right
+  const plotH = height - padding.top - padding.bottom
+
+  const maxX = Math.max(...points.map(p => p.x), 1) * 1.1
+  const maxY = Math.max(...points.map(p => p.y), 1) * 1.1
+  const xScale = x => padding.left + (x / maxX) * plotW
+  const yScale = y => padding.top + plotH - (y / maxY) * plotH
+
+  const TICKS = 5
+  const xTicks = Array.from({ length: TICKS + 1 }, (_, i) => maxX * i / TICKS)
+  const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => maxY * i / TICKS)
+
+  return (
+    <svg width={width} height={height} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: '6px' }}>
+      {xTicks.map(v => (
+        <g key={`x${v}`}>
+          <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={padding.top + plotH} stroke="#eee" />
+          <text x={xScale(v)} y={padding.top + plotH + 18} fontSize="11" textAnchor="middle" fill="#666">{v.toFixed(0)}</text>
+        </g>
+      ))}
+      {yTicks.map(v => (
+        <g key={`y${v}`}>
+          <line x1={padding.left} y1={yScale(v)} x2={padding.left + plotW} y2={yScale(v)} stroke="#eee" />
+          <text x={padding.left - 8} y={yScale(v) + 4} fontSize="11" textAnchor="end" fill="#666">{v.toFixed(0)}</text>
+        </g>
+      ))}
+      <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotH} stroke="#999" />
+      <line x1={padding.left} y1={padding.top + plotH} x2={padding.left + plotW} y2={padding.top + plotH} stroke="#999" />
+      <text x={padding.left + plotW / 2} y={height - 6} fontSize="12" textAnchor="middle" fill="#333">Pick Value</text>
+      <text
+        fontSize="12" textAnchor="middle" fill="#333"
+        transform={`translate(14, ${padding.top + plotH / 2}) rotate(-90)`}
+      >
+        3Yr Score
+      </text>
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={xScale(p.x)}
+          cy={yScale(p.y)}
+          r={5}
+          fill="#2563eb"
+          fillOpacity={0.65}
+          stroke="#1a1a2e"
+          strokeWidth={0.5}
+          style={{ cursor: 'pointer' }}
+          onClick={() => onPointClick(p.playerId)}
+        >
+          <title>{`${p.label} - Pick Value ${p.x.toFixed(1)}, 3Yr Score ${p.y.toFixed(1)}`}</title>
+        </circle>
+      ))}
+    </svg>
+  )
+}
+
 export default function RookieDraftAnalytics() {
   const { selectedLeagueId } = useAccount()
   const { openPlayer } = usePlayerModal()
@@ -22,6 +86,7 @@ export default function RookieDraftAnalytics() {
   const [error, setError] = useState(null)
   const [sortBy, setSortBy] = useState('score')
   const [sortDir, setSortDir] = useState('desc')
+  const [yearFilter, setYearFilter] = useState('all')
 
   useEffect(() => {
     fetch(`${API}/current-week`)
@@ -178,6 +243,12 @@ export default function RookieDraftAnalytics() {
     })
   })
 
+  // Both the chart and the table read from this - the scale factor above
+  // is still computed from the FULL class regardless of this filter, so
+  // narrowing to one year never changes any pick's value.
+  const seasonOptions = [...new Set(rows.map(r => r.season))].sort((a, b) => b - a)
+  const filteredRows = yearFilter === 'all' ? rows : rows.filter(r => r.season === Number(yearFilter))
+
   const SORT_KEYS = {
     season: r => r.season,
     pickNo: r => r.pickNo,
@@ -191,12 +262,21 @@ export default function RookieDraftAnalytics() {
     valueAdded: r => r.valueAdded ?? -Infinity,
   }
   const sortKey = SORT_KEYS[sortBy] || SORT_KEYS.score
-  const sorted = [...rows].sort((a, b) => {
+  const sorted = [...filteredRows].sort((a, b) => {
     const ka = sortKey(a)
     const kb = sortKey(b)
     const diff = typeof ka === 'string' ? ka.localeCompare(kb) : ka - kb
     return sortDir === 'asc' ? diff : -diff
   })
+
+  const chartPoints = filteredRows
+    .filter(r => r.pickValue != null && r.score != null)
+    .map(r => ({
+      x: r.pickValue,
+      y: r.score,
+      playerId: r.playerId,
+      label: r.player ? `${r.player.first_name} ${r.player.last_name}` : `Player ${r.playerId}`,
+    }))
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -240,6 +320,18 @@ export default function RookieDraftAnalytics() {
         class so that class's pick values add up to its total 3Yr Score - a stronger class's picks are worth
         more than the same slot in a weaker one.
       </p>
+
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+        <span style={{ fontSize: '14px', color: '#666' }}>Draft class:</span>
+        <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
+          <option value="all">All Years</option>
+          {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </label>
+
+      <div>
+        <ScatterChart points={chartPoints} onPointClick={openPlayer} />
+      </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
         <thead>
@@ -301,6 +393,7 @@ export default function RookieDraftAnalytics() {
         </tbody>
       </table>
       {rows.length === 0 && <p>No rookie drafts found for this league.</p>}
+      {rows.length > 0 && filteredRows.length === 0 && <p>No picks for that draft class.</p>}
     </div>
   )
 }
