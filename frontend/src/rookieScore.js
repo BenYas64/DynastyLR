@@ -67,3 +67,10 @@ export function parRankColor(rank) {
   if (r <= tier3) return PAR_RANK_COLORS[2]
   return PAR_RANK_COLORS[3]
 }
+
+// Rookie pick value curve - a fixed function of the overall pick number
+// alone (same for every draft class, no league/season dependency), so
+// pick #1 is always 100 and value decays smoothly from there.
+export function pickValue(pickNo) {
+  return 80 * Math.pow(0.5, pickNo / 11 - 1 / 11) + 20 * Math.pow(0.5, pickNo - 1)
+}

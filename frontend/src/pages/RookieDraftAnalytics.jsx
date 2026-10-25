@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
 import { teamName, teamAvatarUrl } from '../teamDisplay.js'
-import { CURRENT_SEASON, threeYearDraftScore, parRankColor } from '../rookieScore.js'
+import { CURRENT_SEASON, threeYearDraftScore, parRankColor, pickValue } from '../rookieScore.js'
 
 const API = 'https://api.dynastylr.site'
 
@@ -152,7 +152,7 @@ export default function RookieDraftAnalytics() {
       dynastyValue: rookieValues[pick.playerId]?.dynasty_value,
       yearPar: years.map(year => rookiePar[year]?.[pick.playerId]),
       yearRank: years.map(year => rookieRank[year]?.[pick.playerId]),
-      pickValue: null, // not computed yet
+      pickValue: pickValue(pick.pickNo),
     }
   })
 
@@ -265,7 +265,7 @@ export default function RookieDraftAnalytics() {
               {yearCell(row, 2)}
               <td style={{ padding: '10px' }}>{row.dynastyValue ?? '-'}</td>
               <td style={{ padding: '10px' }}>{row.score != null ? row.score.toFixed(1) : '...'}</td>
-              <td style={{ padding: '10px' }}>{row.pickValue ?? '-'}</td>
+              <td style={{ padding: '10px' }}>{row.pickValue != null ? row.pickValue.toFixed(1) : '-'}</td>
             </tr>
           ))}
         </tbody>
