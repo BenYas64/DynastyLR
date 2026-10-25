@@ -172,7 +172,10 @@ export default function RookieDraftAnalytics() {
     const totalBase = classRows.reduce((sum, r) => sum + r.basePickValue, 0)
     const totalScore = classRows.reduce((sum, r) => sum + r.score, 0)
     const scale = allScored && totalBase > 0 ? totalScore / totalBase : null
-    classRows.forEach(r => { r.pickValue = scale != null ? r.basePickValue * scale : null })
+    classRows.forEach(r => {
+      r.pickValue = scale != null ? r.basePickValue * scale : null
+      r.valueAdded = r.pickValue != null && r.score != null ? r.score - r.pickValue : null
+    })
   })
 
   const SORT_KEYS = {
@@ -185,6 +188,7 @@ export default function RookieDraftAnalytics() {
     dynastyValue: r => r.dynastyValue ?? -Infinity,
     score: r => r.score ?? -Infinity,
     pickValue: r => r.pickValue ?? -Infinity,
+    valueAdded: r => r.valueAdded ?? -Infinity,
   }
   const sortKey = SORT_KEYS[sortBy] || SORT_KEYS.score
   const sorted = [...rows].sort((a, b) => {
@@ -265,6 +269,9 @@ export default function RookieDraftAnalytics() {
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('pickValue')}>
               Pick Value{sortArrow('pickValue')}
             </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('valueAdded')}>
+              Value Added{sortArrow('valueAdded')}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -288,6 +295,7 @@ export default function RookieDraftAnalytics() {
               <td style={{ padding: '10px' }}>{row.dynastyValue ?? '-'}</td>
               <td style={{ padding: '10px' }}>{row.score != null ? row.score.toFixed(1) : '...'}</td>
               <td style={{ padding: '10px' }}>{row.pickValue != null ? row.pickValue.toFixed(1) : '...'}</td>
+              <td style={{ padding: '10px' }}>{row.valueAdded != null ? row.valueAdded.toFixed(1) : '...'}</td>
             </tr>
           ))}
         </tbody>
