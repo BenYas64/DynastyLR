@@ -9,7 +9,7 @@ const API = 'https://api.dynastylr.site'
 // Fixed categorical palette, cycled if there are ever more draft classes
 // than colors - assigned by season so a year's color never shifts as
 // more classes get added over time.
-const SEASON_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0891b2', '#db2777', '#65a30d']
+const SEASON_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0891b2', '#ec207c']
 
 // Plain inline SVG, no charting library - this is a simple scatter plot
 // (pick value vs. 3Yr score) and didn't seem worth adding a new
