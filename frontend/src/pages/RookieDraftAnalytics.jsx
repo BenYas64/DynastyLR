@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAccount } from '../AccountContext.jsx'
 import { usePlayerModal } from '../PlayerModalContext.jsx'
-import { teamName, teamAvatarUrl } from '../teamDisplay.js'
+import { teamAvatarUrl } from '../teamDisplay.js'
 import { CURRENT_SEASON, threeYearDraftScore, parRankColor, pickValue } from '../rookieScore.js'
 
 const API = 'https://api.dynastylr.site'
@@ -107,6 +107,7 @@ export default function RookieDraftAnalytics() {
   const [sortBy, setSortBy] = useState('score')
   const [sortDir, setSortDir] = useState('desc')
   const [yearFilter, setYearFilter] = useState('all')
+  const [userFilter, setUserFilter] = useState('all')
 
   useEffect(() => {
     fetch(`${API}/current-week`)
@@ -139,9 +140,9 @@ export default function RookieDraftAnalytics() {
           seasonToLeagueId[season] = leagueId
 
           // roster_id is only meaningful within its own season's league -
-          // resolve it to a team name now, using that same season's own
-          // rosters/users, rather than carrying every season's rosters
-          // around for a render-time lookup.
+          // resolve it to the owning user now, using that same season's
+          // own rosters/users, rather than carrying every season's
+          // rosters around for a render-time lookup.
           const userById = {}
           users.forEach(u => { userById[u.user_id] = u })
           const rosterById = {}
@@ -153,8 +154,13 @@ export default function RookieDraftAnalytics() {
               const user = roster ? userById[roster.owner_id] : null
               picks.push({
                 season, pickNo: p.pick_no, playerId: p.player_id,
-                team: roster ? teamName(user) : null,
-                teamAvatar: roster ? teamAvatarUrl(user) : null,
+                // user_id is stable across seasons (unlike roster_id, which
+                // is only meaningful within its own league/season) - used
+                // as the filter dropdown's key, with display_name as the
+                // label actually shown.
+                userId: roster ? roster.owner_id : null,
+                userName: user?.display_name || null,
+                userAvatar: roster ? teamAvatarUrl(user) : null,
               })
               allPlayerIds.add(p.player_id)
             }
@@ -263,16 +269,21 @@ export default function RookieDraftAnalytics() {
     })
   })
 
-  // Both the chart and the table read from this - the scale factor above
-  // is still computed from the FULL class regardless of this filter, so
-  // narrowing to one year never changes any pick's value.
+  // Both the chart and the table read from these - the scale factor above
+  // is still computed from the FULL class regardless of either filter, so
+  // narrowing to one year or one user never changes any pick's value.
   const seasonOptions = [...new Set(rows.map(r => r.season))].sort((a, b) => b - a)
-  const filteredRows = yearFilter === 'all' ? rows : rows.filter(r => r.season === Number(yearFilter))
+  const userOptions = [...new Map(rows.filter(r => r.userId).map(r => [r.userId, r.userName || r.userId])).entries()]
+    .sort((a, b) => (a[1] || '').localeCompare(b[1] || ''))
+  const matchesFilters = r =>
+    (yearFilter === 'all' || r.season === Number(yearFilter)) &&
+    (userFilter === 'all' || r.userId === userFilter)
+  const filteredRows = rows.filter(matchesFilters)
 
   const SORT_KEYS = {
     season: r => r.season,
     pickNo: r => r.pickNo,
-    team: r => r.team || '',
+    user: r => r.userName || '',
     year1: r => r.yearPar[0] ?? -Infinity,
     year2: r => r.yearPar[1] ?? -Infinity,
     year3: r => r.yearPar[2] ?? -Infinity,
@@ -304,12 +315,12 @@ export default function RookieDraftAnalytics() {
     label: r.player ? `${r.player.first_name} ${r.player.last_name}` : `Player ${r.playerId}`,
   })
 
-  // Axis bounds come from EVERY scored pick regardless of the year
-  // filter, so switching years never rescales the chart - only which
+  // Axis bounds come from EVERY scored pick regardless of either filter,
+  // so switching years or users never rescales the chart - only which
   // points are actually drawn changes.
   const chartMaxX = Math.max(...scoredRows.map(r => r.pickValue), 1) * 1.1
   const chartMaxY = Math.max(...scoredRows.map(r => r.score), 1) * 1.1
-  const chartPoints = (yearFilter === 'all' ? scoredRows : scoredRows.filter(r => r.season === Number(yearFilter))).map(toPoint)
+  const chartPoints = scoredRows.filter(matchesFilters).map(toPoint)
   const scoredSeasons = [...new Set(scoredRows.map(r => r.season))].sort((a, b) => b - a)
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
@@ -356,13 +367,22 @@ export default function RookieDraftAnalytics() {
         more than the same slot in a weaker one.
       </p>
 
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-        <span style={{ fontSize: '14px', color: '#666' }}>Draft class:</span>
-        <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
-          <option value="all">All Years</option>
-          {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </label>
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '16px' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', color: '#666' }}>Draft class:</span>
+          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
+            <option value="all">All Years</option>
+            {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', color: '#666' }}>User:</span>
+          <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
+            <option value="all">All Users</option>
+            {userOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </label>
+      </div>
 
       <div>
         <ScatterChart points={chartPoints} maxX={chartMaxX} maxY={chartMaxY} legend={chartLegend} onPointClick={openPlayer} />
@@ -375,8 +395,8 @@ export default function RookieDraftAnalytics() {
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('season')}>
               Draft{sortArrow('season')}
             </th>
-            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('team')}>
-              Drafted By{sortArrow('team')}
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('user')}>
+              Drafted By{sortArrow('user')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('year1')}>
               Year 1 PAR{sortArrow('year1')}
@@ -413,8 +433,8 @@ export default function RookieDraftAnalytics() {
               </td>
               <td style={{ padding: '10px' }}>{row.season} Pick {row.pickNo}</td>
               <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {row.teamAvatar && <img src={row.teamAvatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />}
-                {row.team || 'Unknown'}
+                {row.userAvatar && <img src={row.userAvatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />}
+                {row.userName || 'Unknown'}
               </td>
               {yearCell(row, 0)}
               {yearCell(row, 1)}
@@ -428,7 +448,7 @@ export default function RookieDraftAnalytics() {
         </tbody>
       </table>
       {rows.length === 0 && <p>No rookie drafts found for this league.</p>}
-      {rows.length > 0 && filteredRows.length === 0 && <p>No picks for that draft class.</p>}
+      {rows.length > 0 && filteredRows.length === 0 && <p>No picks match the current filters.</p>}
     </div>
   )
 }
