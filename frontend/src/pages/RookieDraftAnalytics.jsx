@@ -30,6 +30,13 @@ function roundAxisMax(best) {
   return Math.ceil((best + 1) / 10) * 10
 }
 
+// For the By User chart's axes specifically: the lowest multiple of 50
+// that still fits every team's total (no padding beyond that, unlike
+// roundAxisMax above - just whatever's needed to fit everyone).
+function roundAxisMax50(best) {
+  return Math.max(50, Math.ceil(best / 50) * 50)
+}
+
 // Shared grid/axes/y=x-line chrome for both charts below - plain inline
 // SVG, no charting library (didn't seem worth a new dependency,
 // especially one the Pi would need `npm install`-ed, for two simple
@@ -55,16 +62,10 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
   return (
     <svg width={width} height={height} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: '6px' }}>
       {xTicks.map(v => (
-        <g key={`x${v}`}>
-          <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={padding.top + plotH} stroke="#eee" />
-          <text x={xScale(v)} y={padding.top + plotH + 18} fontSize="11" textAnchor="middle" fill="#666">{v.toFixed(0)}</text>
-        </g>
+        <text key={`x${v}`} x={xScale(v)} y={padding.top + plotH + 18} fontSize="11" textAnchor="middle" fill="#666">{v.toFixed(0)}</text>
       ))}
       {yTicks.map(v => (
-        <g key={`y${v}`}>
-          <line x1={padding.left} y1={yScale(v)} x2={padding.left + plotW} y2={yScale(v)} stroke="#eee" />
-          <text x={padding.left - 8} y={yScale(v) + 4} fontSize="11" textAnchor="end" fill="#666">{v.toFixed(0)}</text>
-        </g>
+        <text key={`y${v}`} x={padding.left - 8} y={yScale(v) + 4} fontSize="11" textAnchor="end" fill="#666">{v.toFixed(0)}</text>
       ))}
       <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotH} stroke="#999" />
       <line x1={padding.left} y1={padding.top + plotH} x2={padding.left + plotW} y2={padding.top + plotH} stroke="#999" />
@@ -122,7 +123,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
   return (
     <div>
       <ChartFrame
-        maxX={maxX} maxY={maxY} xLabel="Pick Value" yLabel="3Yr PAR"
+        maxX={maxX} maxY={maxY} xLabel="Pick Value" yLabel="3yr PAR"
         renderMarks={(xScale, yScale) => points.map((p, i) => (
           <circle
             key={i}
@@ -136,7 +137,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
             style={{ cursor: 'pointer' }}
             onClick={() => onPointClick(p.playerId)}
           >
-            <title>{`${p.label} (${p.season}) - Pick Value ${p.x.toFixed(1)}, 3Yr PAR ${p.y.toFixed(1)}`}</title>
+            <title>{`${p.label} (${p.season}) - Pick Value ${p.x.toFixed(1)}, 3yr PAR ${p.y.toFixed(1)}`}</title>
           </circle>
         ))}
       />
@@ -153,7 +154,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
 }
 
 // One point per user who's made a scored rookie pick - aggregate total
-// pick value (x) vs. total 3Yr PAR (y), marked with their own avatar
+// pick value (x) vs. total 3yr PAR (y), marked with their own avatar
 // instead of a plain dot. A user with no avatar on file falls back to a
 // plain circle with their name's first letter. A tiny name label sits
 // just below each one, since avatars alone aren't reliably readable at
@@ -162,37 +163,55 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
   if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
   const SIZE = 26
   const HALF = SIZE / 2
+  const LABEL_STEP = 10
+  const CHAR_WIDTH = 5
 
   return (
     <ChartFrame
-      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3Yr PAR"
-      renderMarks={(xScale, yScale) => points.map((p, i) => {
-        const cx = xScale(p.x)
-        const cy = yScale(p.y)
-        const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3Yr PAR ${p.y.toFixed(1)}`
-        return (
-          <g key={i} style={{ cursor: 'pointer' }} onClick={() => onPointClick(p.userId)}>
-            <title>{title}</title>
-            {p.avatar ? (
-              <image
-                href={p.avatar} x={cx - HALF} y={cy - HALF} width={SIZE} height={SIZE}
-                style={{ clipPath: 'circle(50%)' }}
-              />
-            ) : (
-              <>
-                <circle cx={cx} cy={cy} r={HALF} fill="#9ca3af" />
-                <text x={cx} y={cy + 4} fontSize="12" fontWeight="bold" textAnchor="middle" fill="#fff">
-                  {(p.label || '?')[0].toUpperCase()}
-                </text>
-              </>
-            )}
-            <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
-            <text x={cx} y={cy + HALF + 11} fontSize="9" textAnchor="middle" fill="#333">
-              {p.label}
-            </text>
-          </g>
-        )
-      })}
+      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR"
+      renderMarks={(xScale, yScale) => {
+        // Greedy label stacking: a cluster of nearby avatars (common for
+        // an aggregate chart, since totals bunch up) would otherwise
+        // print their name labels right on top of each other - each new
+        // label drops further down, one step at a time, until it clears
+        // every label already placed near its x position.
+        const placed = []
+        return points.map((p, i) => {
+          const cx = xScale(p.x)
+          const cy = yScale(p.y)
+          const label = p.label || ''
+          const halfW = Math.max(14, label.length * CHAR_WIDTH / 2)
+          let labelY = cy + HALF + 11
+          while (placed.some(b => Math.abs(b.cx - cx) < (b.halfW + halfW) && Math.abs(b.y - labelY) < LABEL_STEP)) {
+            labelY += LABEL_STEP
+          }
+          placed.push({ cx, halfW, y: labelY })
+
+          const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3yr PAR ${p.y.toFixed(1)}`
+          return (
+            <g key={i} style={{ cursor: 'pointer' }} onClick={() => onPointClick(p.userId)}>
+              <title>{title}</title>
+              {p.avatar ? (
+                <image
+                  href={p.avatar} x={cx - HALF} y={cy - HALF} width={SIZE} height={SIZE}
+                  style={{ clipPath: 'circle(50%)' }}
+                />
+              ) : (
+                <>
+                  <circle cx={cx} cy={cy} r={HALF} fill="#9ca3af" />
+                  <text x={cx} y={cy + 4} fontSize="12" fontWeight="bold" textAnchor="middle" fill="#fff">
+                    {(label || '?')[0].toUpperCase()}
+                  </text>
+                </>
+              )}
+              <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
+              <text x={cx} y={labelY} fontSize="9" textAnchor="middle" fill="#333">
+                {label}
+              </text>
+            </g>
+          )
+        })
+      }}
     />
   )
 }
@@ -389,7 +408,7 @@ export default function RookieDraftAnalytics() {
   // Pick values stay proportional to the base curve (pick 1 is always
   // twice pick 8, no matter the year) but get uniformly scaled per draft
   // class so that class's pick values sum to exactly that class's total
-  // 3Yr PAR - a class with a lot of combined value gets inflated pick
+  // 3yr PAR - a class with a lot of combined value gets inflated pick
   // values relative to the base curve, a weak class gets deflated ones.
   // Needs every pick in the class scored before it means anything, so a
   // class with any pick still loading shows '...' across the board.
@@ -490,8 +509,8 @@ export default function RookieDraftAnalytics() {
     return Object.values(totals)
   }
   const allUserTotals = aggregateByUser(scoredRows)
-  const userChartMaxX = roundAxisMax(Math.max(...allUserTotals.map(u => u.x), 0))
-  const userChartMaxY = roundAxisMax(Math.max(...allUserTotals.map(u => u.y), 0))
+  const userChartMaxX = roundAxisMax50(Math.max(...allUserTotals.map(u => u.x), 0))
+  const userChartMaxY = roundAxisMax50(Math.max(...allUserTotals.map(u => u.y), 0))
   const userChartPoints = aggregateByUser(scoredRows.filter(matchesFilters))
 
   const handleSort = (field) => {
@@ -530,10 +549,10 @@ export default function RookieDraftAnalytics() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Rookie Draft Analytics</h2>
       <p style={{ color: '#666', fontSize: '14px' }}>
-        Every rookie-draft pick in this league's history ({rows.length} picks). 3Yr PAR averages a player's
+        Every rookie-draft pick in this league's history ({rows.length} picks). 3yr PAR averages a player's
         first 3 seasons' PAR, filling in any season not fully played yet from their current dynasty value.
         Pick Value follows a fixed curve by pick number (pick 1 is always twice pick 8) scaled per draft
-        class so that class's pick values add up to its total 3Yr PAR - a stronger class's picks are worth
+        class so that class's pick values add up to its total 3yr PAR - a stronger class's picks are worth
         more than the same slot in a weaker one.
       </p>
 
@@ -590,7 +609,7 @@ export default function RookieDraftAnalytics() {
               Dynasty Value{sortArrow('dynastyValue')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('score')}>
-              3Yr PAR{sortArrow('score')}
+              3yr PAR{sortArrow('score')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('pickValue')}>
               Pick Value{sortArrow('pickValue')}

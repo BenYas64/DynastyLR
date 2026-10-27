@@ -312,7 +312,7 @@ export default function Draft() {
                             title="Average PAR across this player's first 3 seasons - any season not fully played yet has its remaining weeks filled in from current dynasty value"
                             style={{ color: '#666', fontSize: '13px', minWidth: '100px', textAlign: 'right', fontWeight: 'bold' }}
                           >
-                            3Yr PAR: {score != null ? score.toFixed(1) : '...'}
+                            3yr PAR: {score != null ? score.toFixed(1) : '...'}
                           </span>
                         )
                       })()}
