@@ -45,7 +45,7 @@ function roundAxisMax50(best) {
 // when a filter narrows what's actually drawn. `renderMarks(xScale,
 // yScale)` returns each chart's own data marks (circles, avatar images,
 // whatever) - the only thing that differs between them.
-function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
+function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks, showLineLabels = true }) {
   const width = 600
   const height = 400
   const padding = { left: 55, right: 20, top: 16, bottom: 45 }
@@ -91,7 +91,7 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
                 x1={xScale(0)} y1={yScale(0)} x2={xScale(exitX)} y2={yScale(exitY)}
                 stroke="#999" strokeOpacity={opacity} strokeWidth={1} strokeDasharray="5,4"
               />
-              {label && (
+              {label && showLineLabels && (
                 <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999" fillOpacity={opacity}>
                   {label}
                 </text>
@@ -169,7 +169,7 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
 
   return (
     <ChartFrame
-      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR"
+      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR" showLineLabels={false}
       renderMarks={(xScale, yScale) => {
         const avatars = points.map(p => ({ cx: xScale(p.x), cy: yScale(p.y) }))
         const box = (x, y, halfW) => ({ left: x - halfW, right: x + halfW, top: y - LABEL_H / 2, bottom: y + LABEL_H / 2 })
