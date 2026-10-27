@@ -632,9 +632,9 @@ export default function RookieDraftAnalytics() {
       <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '24px' }}>
         {[
           ['# of Picks', filteredRows.length],
-          ['Draft Pick Value', totalPickValue.toFixed(1)],
-          ['Total Draft Score', totalScore.toFixed(1)],
-          ['Value Added', totalValueAdded.toFixed(1)],
+          ['Draft Pick Value', totalPickValue.toFixed(0)],
+          ['Total Draft Score', totalScore.toFixed(0)],
+          ['Value Added', totalValueAdded.toFixed(0)],
           ['Value Added %', valueAddedPct != null ? `${valueAddedPct.toFixed(1)}%` : '-'],
         ].map(([label, value]) => (
           <div key={label}>
