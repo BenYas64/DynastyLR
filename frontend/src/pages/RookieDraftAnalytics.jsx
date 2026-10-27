@@ -79,10 +79,9 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
       {(() => {
         // y = m*x from the origin, drawn only out to wherever it exits
         // the plot's own bounds (the two axes don't share a scale, so a
-        // slope-1 line doesn't necessarily reach a corner). y = x itself
-        // is where a total scored precisely what was expected (Value
-        // Added = 0); the unlabeled, lighter 0.8x/1.2x lines mark a
-        // +/-20% band around it.
+        // slope-1 line doesn't necessarily reach a corner). "Expected" is
+        // where a total scored precisely what was expected (Value Added
+        // = 0); the lighter +/-25% lines mark a band around it.
         const diagonal = (slope, label, opacity = 1) => {
           const exitX = Math.min(maxX, maxY / slope)
           const exitY = slope * exitX
@@ -93,7 +92,7 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
                 stroke="#999" strokeOpacity={opacity} strokeWidth={1} strokeDasharray="5,4"
               />
               {label && (
-                <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999">
+                <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999" fillOpacity={opacity}>
                   {label}
                 </text>
               )}
@@ -102,9 +101,9 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
         }
         return (
           <>
-            {diagonal(0.75, null, 0.4)}
-            {diagonal(1, 'y = x')}
-            {diagonal(1.25, null, 0.4)}
+            {diagonal(0.75, '-25%', 0.4)}
+            {diagonal(1, 'Expected')}
+            {diagonal(1.25, '+25%', 0.4)}
           </>
         )
       })()}
