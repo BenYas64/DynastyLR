@@ -46,8 +46,8 @@ function roundAxisMax50(best) {
 // yScale)` returns each chart's own data marks (circles, avatar images,
 // whatever) - the only thing that differs between them.
 function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
-  const width = 480
-  const height = 300
+  const width = 600
+  const height = 400
   const padding = { left: 55, right: 20, top: 16, bottom: 45 }
   const plotW = width - padding.left - padding.right
   const plotH = height - padding.top - padding.bottom
@@ -581,9 +581,6 @@ export default function RookieDraftAnalytics() {
 
         <div>
           <h3 style={{ marginTop: 0, marginBottom: '8px' }}>By User</h3>
-          <p style={{ color: '#666', fontSize: '14px', marginTop: 0 }}>
-            Click a user's avatar to filter the table and both charts to just them.
-          </p>
           <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
         </div>
       </div>
