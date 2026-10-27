@@ -76,24 +76,34 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
         {yLabel}
       </text>
       {(() => {
-        // y = x: landing exactly on this line means the total scored
-        // precisely what was expected (Value Added = 0) - above it
-        // overperformed, below it underperformed. Drawn only out to
-        // wherever it exits the plot's own bounds, since the two axes
-        // don't share a scale.
-        const d = Math.min(maxX, maxY)
+        // y = m*x from the origin, drawn only out to wherever it exits
+        // the plot's own bounds (the two axes don't share a scale, so a
+        // slope-1 line doesn't necessarily reach a corner). y = x itself
+        // is where a total scored precisely what was expected (Value
+        // Added = 0); the unlabeled 0.9x/1.1x lines mark a +/-10% band
+        // around it.
+        const diagonal = (slope, label) => {
+          const exitX = Math.min(maxX, maxY / slope)
+          const exitY = slope * exitX
+          return (
+            <g key={slope}>
+              <line
+                x1={xScale(0)} y1={yScale(0)} x2={xScale(exitX)} y2={yScale(exitY)}
+                stroke="#999" strokeWidth={1} strokeDasharray="5,4"
+              />
+              {label && (
+                <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999">
+                  {label}
+                </text>
+              )}
+            </g>
+          )
+        }
         return (
           <>
-            <line
-              x1={xScale(0)} y1={yScale(0)} x2={xScale(d)} y2={yScale(d)}
-              stroke="#999" strokeWidth={1} strokeDasharray="5,4"
-            />
-            <text
-              x={xScale(d) - 4} y={yScale(d) - 6}
-              fontSize="11" textAnchor="end" fill="#999"
-            >
-              y = x
-            </text>
+            {diagonal(0.9, null)}
+            {diagonal(1, 'y = x')}
+            {diagonal(1.1, null)}
           </>
         )
       })()}
