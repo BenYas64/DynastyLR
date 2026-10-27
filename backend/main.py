@@ -29,6 +29,20 @@ def get_players_by_ids(ids: str, db: Session = Depends(get_db)):
         return []
     return db.query(Player).filter(Player.player_id.in_(id_list)).all()
 
+@app.get("/users/by-ids")
+def get_users_by_ids(ids: str, db: Session = Depends(get_db)):
+    """Global user lookup, unscoped to any one league's membership - unlike
+    /league/{league_id}/users (which only returns that league's own
+    LeagueUser rows), this resolves a user_id regardless of whether they're
+    a recorded member there. Needed for draft_picks.picked_by: a roster
+    seat can change hands across seasons, so a pick's picked_by can
+    legitimately point to someone who was never a member of THAT specific
+    historical league/season."""
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return []
+    return db.query(User).filter(User.user_id.in_(id_list)).all()
+
 # FLEX-type roster slots don't literally match a player's fantasy_positions
 # (e.g. no player is tagged "FLEX"), so they're expanded to the positions
 # eligible to fill them.

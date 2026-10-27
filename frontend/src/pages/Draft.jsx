@@ -13,6 +13,11 @@ export default function Draft() {
   const [selectedKey, setSelectedKey] = useState(null)
   const [rostersByLeague, setRostersByLeague] = useState({})
   const [usersByLeague, setUsersByLeague] = useState({})
+  // Fallback for picked_by pointing to someone who isn't a recorded
+  // member of that pick's own season/league (a roster seat changing
+  // hands over the years) - unscoped to any one league, unlike
+  // usersByLeague.
+  const [globalUsersById, setGlobalUsersById] = useState({})
   const [players, setPlayers] = useState({})
   const [seasonToLeagueId, setSeasonToLeagueId] = useState({})
   // { [season]: { [player_id]: totalPar } } - only ever populated for a
@@ -103,6 +108,33 @@ export default function Draft() {
         setUsersByLeague(usersMap)
         setDraftOptions(options)
         setSelectedKey(prev => options.some(o => o.key === prev) ? prev : (options[0]?.key || null))
+
+        // picked_by (or its roster-owner fallback, same priority teamFor
+        // uses below) can point to someone who was never a recorded
+        // member of THAT pick's own season/league - a roster seat
+        // changing hands over the years. Fetched once for every season
+        // up front, independent of the rest of this load, so switching
+        // the draft dropdown later never needs another round trip for it.
+        const unresolvedUserIds = new Set()
+        seasons.forEach(({ leagueId, picks, rosters }) => {
+          const userMap = usersMap[leagueId]
+          const rosterById = {}
+          rosters.forEach(r => { rosterById[r.roster_id] = r })
+          picks.forEach(p => {
+            const id = p.picked_by || rosterById[p.roster_id]?.owner_id
+            if (id && !userMap[id]) unresolvedUserIds.add(id)
+          })
+        })
+        if (unresolvedUserIds.size > 0) {
+          fetch(`${API}/users/by-ids?ids=${[...unresolvedUserIds].join(',')}`)
+            .then(r => r.json())
+            .then(globalUsers => {
+              const byId = {}
+              globalUsers.forEach(u => { byId[u.user_id] = u })
+              setGlobalUsersById(byId)
+            })
+            .catch(() => {})
+        }
 
         const ids = [...allPlayerIds]
         if (ids.length === 0) {
@@ -201,11 +233,16 @@ export default function Draft() {
   const rosterMap = {}
   rosters.forEach(r => { rosterMap[r.roster_id] = r })
 
-  const teamFor = (rosterId) => {
-    if (rosterId == null) return { name: 'TBD', avatar: null }
-    const roster = rosterMap[rosterId]
-    const user = roster ? users[roster.owner_id] : null
-    return { name: roster ? teamName(user) : `Roster ${rosterId}`, avatar: teamAvatarUrl(user) }
+  // picked_by (who actually submitted the pick in Sleeper) can differ
+  // from the roster's current owner - a commissioner picking for an
+  // absent manager, a departed owner's historical picks, etc. - so it
+  // takes priority when present; roster_id's owner is still the fallback
+  // for picks where Sleeper never recorded a picker (e.g. autopicks).
+  const teamFor = (pick) => {
+    const userId = pick.picked_by || (pick.roster_id != null ? rosterMap[pick.roster_id]?.owner_id : null)
+    const user = userId ? (users[userId] || globalUsersById[userId]) : null
+    if (user) return { name: teamName(user), avatar: teamAvatarUrl(user) }
+    return { name: pick.roster_id != null ? `Roster ${pick.roster_id}` : 'TBD', avatar: null }
   }
 
   const byRound = {}
@@ -226,7 +263,7 @@ export default function Draft() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: selected.draftType === 'rookie' ? '1050px' : '600px' }}>
             {byRound[round].map(pick => {
               const player = players[pick.player_id]
-              const team = teamFor(pick.roster_id)
+              const team = teamFor(pick)
               return (
                 <div
                   key={pick.pick_no}

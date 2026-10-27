@@ -191,73 +191,105 @@ export default function RookieDraftAnalytics() {
 
           seasonPicks.forEach(p => {
             if (p.draft_type === 'rookie' && p.player_id) {
+              // picked_by (who actually submitted the pick in Sleeper) can
+              // differ from the roster's current owner - a commissioner
+              // picking for an absent manager, a departed owner's
+              // historical picks, etc. - so it takes priority when
+              // present; roster_id's owner is still the fallback for
+              // picks where Sleeper never recorded a picker.
               const roster = rosterById[p.roster_id]
-              const user = roster ? userById[roster.owner_id] : null
+              const pickedByUserId = p.picked_by || roster?.owner_id || null
+              const user = pickedByUserId ? userById[pickedByUserId] : null
               picks.push({
                 season, pickNo: p.pick_no, playerId: p.player_id,
                 // user_id is stable across seasons (unlike roster_id, which
                 // is only meaningful within its own league/season) - used
                 // as the filter dropdown's key, with display_name as the
                 // label actually shown.
-                userId: roster ? roster.owner_id : null,
+                userId: pickedByUserId,
                 userName: user?.display_name || null,
-                userAvatar: roster ? teamAvatarUrl(user) : null,
+                userAvatar: user ? teamAvatarUrl(user) : null,
               })
               allPlayerIds.add(p.player_id)
             }
           })
         })
-        setRookiePicks(picks)
 
-        const ids = [...allPlayerIds]
-        if (ids.length === 0) {
-          setPlayers({})
-          setLoading(false)
-          return
-        }
+        // picked_by can point to someone who isn't a recorded member of
+        // THIS season's league at all (a roster seat changing hands over
+        // the years) - /league/{id}/users would never have them, so
+        // anyone still unresolved gets one extra global lookup before
+        // picks are committed to state.
+        const unresolvedUserIds = [...new Set(picks.filter(p => p.userId && !p.userName).map(p => p.userId))]
+        const resolveMissingUsers = unresolvedUserIds.length > 0
+          ? fetch(`${API}/users/by-ids?ids=${unresolvedUserIds.join(',')}`).then(r => r.json())
+          : Promise.resolve([])
 
-        // Every season from the earliest rookie draft through the current
-        // one - that span covers every (draftSeason..draftSeason+2) window
-        // any pick here could need, since a rookie draft happens every year.
-        // Each season's PAR has to use THAT season's own league (its own
-        // scoring/roster settings), not whichever league the account
-        // currently has selected - same reasoning as the draft page.
-        const earliestSeason = Math.min(...picks.map(p => p.season))
-        const parSeasons = []
-        for (let s = earliestSeason; s <= CURRENT_SEASON; s++) {
-          if (seasonToLeagueId[s]) parSeasons.push(s)
-        }
+        resolveMissingUsers.then(globalUsers => {
+          const globalUserById = {}
+          globalUsers.forEach(u => { globalUserById[u.user_id] = u })
+          picks.forEach(p => {
+            if (p.userId && !p.userName) {
+              const u = globalUserById[p.userId]
+              if (u) {
+                p.userName = u.display_name || null
+                p.userAvatar = teamAvatarUrl(u)
+              }
+            }
+          })
+          setRookiePicks(picks)
 
-        Promise.all([
-          fetch(`${API}/players/by-ids?ids=${ids.join(',')}`).then(r => r.json()),
-          Promise.all(parSeasons.map(season =>
-            fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-totals/${season}?ids=${ids.join(',')}`)
-              .then(r => r.json())
-              .then(totals => ({ season, totals }))
-          )),
-          Promise.all(parSeasons.map(season =>
-            fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-rank/${season}?ids=${ids.join(',')}`)
-              .then(r => r.json())
-              .then(ranks => ({ season, ranks }))
-          )),
-          selectedLeagueId
-            ? fetch(`${API}/players/values?ids=${ids.join(',')}&league_id=${selectedLeagueId}`).then(r => r.json())
-            : Promise.resolve({}),
-        ]).then(([playersData, parResults, rankResults, values]) => {
-          const playersMap = {}
-          playersData.forEach(p => playersMap[p.player_id] = p)
-          setPlayers(playersMap)
+          const ids = [...allPlayerIds]
+          if (ids.length === 0) {
+            setPlayers({})
+            setLoading(false)
+            return
+          }
 
-          const parMap = {}
-          parResults.forEach(({ season, totals }) => { parMap[season] = totals })
-          setRookiePar(parMap)
+          // Every season from the earliest rookie draft through the
+          // current one - that span covers every
+          // (draftSeason..draftSeason+2) window any pick here could need,
+          // since a rookie draft happens every year. Each season's PAR
+          // has to use THAT season's own league (its own scoring/roster
+          // settings), not whichever league the account currently has
+          // selected - same reasoning as the draft page.
+          const earliestSeason = Math.min(...picks.map(p => p.season))
+          const parSeasons = []
+          for (let s = earliestSeason; s <= CURRENT_SEASON; s++) {
+            if (seasonToLeagueId[s]) parSeasons.push(s)
+          }
 
-          const rankMap = {}
-          rankResults.forEach(({ season, ranks }) => { rankMap[season] = ranks })
-          setRookieRank(rankMap)
+          Promise.all([
+            fetch(`${API}/players/by-ids?ids=${ids.join(',')}`).then(r => r.json()),
+            Promise.all(parSeasons.map(season =>
+              fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-totals/${season}?ids=${ids.join(',')}`)
+                .then(r => r.json())
+                .then(totals => ({ season, totals }))
+            )),
+            Promise.all(parSeasons.map(season =>
+              fetch(`${API}/league/${seasonToLeagueId[season]}/players/points-above-replacement-rank/${season}?ids=${ids.join(',')}`)
+                .then(r => r.json())
+                .then(ranks => ({ season, ranks }))
+            )),
+            selectedLeagueId
+              ? fetch(`${API}/players/values?ids=${ids.join(',')}&league_id=${selectedLeagueId}`).then(r => r.json())
+              : Promise.resolve({}),
+          ]).then(([playersData, parResults, rankResults, values]) => {
+            const playersMap = {}
+            playersData.forEach(p => playersMap[p.player_id] = p)
+            setPlayers(playersMap)
 
-          setRookieValues(values)
-          setLoading(false)
+            const parMap = {}
+            parResults.forEach(({ season, totals }) => { parMap[season] = totals })
+            setRookiePar(parMap)
+
+            const rankMap = {}
+            rankResults.forEach(({ season, ranks }) => { rankMap[season] = ranks })
+            setRookieRank(rankMap)
+
+            setRookieValues(values)
+            setLoading(false)
+          })
         })
       })
       .catch(err => {
