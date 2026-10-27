@@ -78,7 +78,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
                 x={xScale(d) - 4} y={yScale(d) - 6}
                 fontSize="11" textAnchor="end" fill="#999"
               >
-                Expected (y = x)
+                y = x
               </text>
             </>
           )
