@@ -72,5 +72,5 @@ export function parRankColor(rank) {
 // alone (same for every draft class, no league/season dependency), so
 // pick #1 is always 100 and value decays smoothly from there.
 export function pickValue(pickNo) {
-  return 80 * Math.pow(0.5, pickNo / 11 - 1 / 11) + 20 * Math.pow(0.5, pickNo - 1)
+  return 75 * Math.pow(0.5, pickNo / 12 - 1 / 12) + 25 * Math.pow(0.5, pickNo - 1)
 }
