@@ -356,7 +356,10 @@ export default function RookieDraftAnalytics() {
   // points are actually drawn changes.
   const chartMaxX = Math.max(...scoredRows.map(r => r.pickValue), 1) * 1.1
   const chartMaxY = Math.max(...scoredRows.map(r => r.score), 1) * 1.1
-  const chartPoints = scoredRows.filter(matchesFilters).map(toPoint)
+  // SVG paints later elements on top of earlier ones, so oldest-first
+  // here means the most recent draft class ends up layered above older
+  // ones wherever points overlap.
+  const chartPoints = scoredRows.filter(matchesFilters).map(toPoint).sort((a, b) => a.season - b.season)
   const scoredSeasons = [...new Set(scoredRows.map(r => r.season))].sort((a, b) => b - a)
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
