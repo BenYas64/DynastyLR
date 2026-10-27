@@ -11,6 +11,16 @@ const API = 'https://api.dynastylr.site'
 // more classes get added over time.
 const SEASON_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0891b2', '#ec207c']
 
+// Deterministic pseudo-random in [0, 1) from a string - used for chart
+// jitter below so a point's wiggle is stable across re-renders (sorting,
+// switching a filter) instead of reshuffling every time Math.random()
+// would get called again.
+function hashToUnit(key) {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return (h % 1000) / 1000
+}
+
 // Plain inline SVG, no charting library - this is a simple scatter plot
 // (pick value vs. 3Yr score) and didn't seem worth adding a new
 // dependency for, especially one the Pi would need `npm install`-ed.
@@ -87,7 +97,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
           <circle
             key={i}
             cx={xScale(p.x)}
-            cy={yScale(p.y)}
+            cy={yScale(p.y + p.jitterY)}
             r={5}
             fill={p.color}
             fillOpacity={0.7}
@@ -331,6 +341,10 @@ export default function RookieDraftAnalytics() {
   const toPoint = r => ({
     x: r.pickValue,
     y: r.score,
+    // Display-only nudge so same/close-scoring picks don't sit exactly
+    // on top of each other - never fed into tooltips, sorting, or the
+    // y=x line, only the plotted dot position.
+    jitterY: (hashToUnit(r.playerId) - 0.5) * 6,
     season: r.season,
     color: colorForSeason(r.season),
     playerId: r.playerId,
