@@ -156,12 +156,14 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
 // pick value (x) vs. total 3yr PAR (y), marked with their own avatar
 // instead of a plain dot. A user with no avatar on file falls back to a
 // plain circle with their name's first letter. A tiny name label sits
-// just below each one, since avatars alone aren't reliably readable at
-// this size.
+// near each one - below by default, but free to land above or to
+// either side instead, wherever it actually clears every avatar and
+// every other label.
 function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
   if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
   const SIZE = 26
   const HALF = SIZE / 2
+  const LABEL_H = 10
   const LABEL_STEP = 10
   const CHAR_WIDTH = 5
 
@@ -169,22 +171,46 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
     <ChartFrame
       maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR"
       renderMarks={(xScale, yScale) => {
-        // Greedy label stacking: a cluster of nearby avatars (common for
-        // an aggregate chart, since totals bunch up) would otherwise
-        // print their name labels right on top of each other - each new
-        // label drops further down, one step at a time, until it clears
-        // every label already placed near its x position.
-        const placed = []
+        const avatars = points.map(p => ({ cx: xScale(p.x), cy: yScale(p.y) }))
+        const box = (x, y, halfW) => ({ left: x - halfW, right: x + halfW, top: y - LABEL_H / 2, bottom: y + LABEL_H / 2 })
+        const boxesOverlap = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+        const hitsAvatar = (b, skipIndex) => avatars.some((a, j) =>
+          j !== skipIndex && a.cx + HALF > b.left && a.cx - HALF < b.right && a.cy + HALF > b.top && a.cy - HALF < b.bottom
+        )
+
+        const placedBoxes = []
         return points.map((p, i) => {
-          const cx = xScale(p.x)
-          const cy = yScale(p.y)
+          const { cx, cy } = avatars[i]
           const label = p.label || ''
           const halfW = Math.max(14, label.length * CHAR_WIDTH / 2)
-          let labelY = cy + HALF + 11
-          while (placed.some(b => Math.abs(b.cx - cx) < (b.halfW + halfW) && Math.abs(b.y - labelY) < LABEL_STEP)) {
-            labelY += LABEL_STEP
+
+          // Below, above, right, left of this point's own avatar, in
+          // that preference order - first one that clears every avatar
+          // (not just this point's own) and every label placed so far
+          // wins. If none do (a genuinely crowded cluster), fall back to
+          // stacking further below, same as before.
+          const candidates = [
+            { x: cx, y: cy + HALF + 11 },
+            { x: cx, y: cy - HALF - 6 },
+            { x: cx + HALF + 4 + halfW, y: cy + 3 },
+            { x: cx - HALF - 4 - halfW, y: cy + 3 },
+          ]
+          let chosen = null
+          for (const c of candidates) {
+            const b = box(c.x, c.y, halfW)
+            if (!hitsAvatar(b, i) && !placedBoxes.some(pb => boxesOverlap(pb, b))) {
+              chosen = c
+              break
+            }
           }
-          placed.push({ cx, halfW, y: labelY })
+          if (!chosen) {
+            let y = cy + HALF + 11
+            while (hitsAvatar(box(cx, y, halfW), i) || placedBoxes.some(pb => boxesOverlap(pb, box(cx, y, halfW)))) {
+              y += LABEL_STEP
+            }
+            chosen = { x: cx, y }
+          }
+          placedBoxes.push(box(chosen.x, chosen.y, halfW))
 
           const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3yr PAR ${p.y.toFixed(1)}`
           return (
@@ -204,7 +230,7 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
                 </>
               )}
               <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
-              <text x={cx} y={labelY} fontSize="9" textAnchor="middle" fill="#333">
+              <text x={chosen.x} y={chosen.y} fontSize="9" textAnchor="middle" fill="#333">
                 {label}
               </text>
             </g>
