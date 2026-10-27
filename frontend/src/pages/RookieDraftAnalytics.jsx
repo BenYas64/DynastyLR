@@ -477,6 +477,15 @@ export default function RookieDraftAnalytics() {
     matchesRoundFilter(r)
   const filteredRows = rows.filter(matchesFilters)
 
+  // Summary stats for whatever's currently filtered - sums only over
+  // picks that are actually scored yet (pickValue/score null otherwise),
+  // same as every other total on this page.
+  const scoredFilteredRows = filteredRows.filter(r => r.pickValue != null && r.score != null)
+  const totalPickValue = scoredFilteredRows.reduce((sum, r) => sum + r.pickValue, 0)
+  const totalScore = scoredFilteredRows.reduce((sum, r) => sum + r.score, 0)
+  const totalValueAdded = scoredFilteredRows.reduce((sum, r) => sum + r.valueAdded, 0)
+  const valueAddedPct = totalPickValue > 0 ? (totalValueAdded / totalPickValue) * 100 : null
+
   const SORT_KEYS = {
     season: r => r.season,
     pickNo: r => r.pickNo,
@@ -618,6 +627,21 @@ export default function RookieDraftAnalytics() {
             <option value="4">4th+ (Picks 37+)</option>
           </select>
         </label>
+      </div>
+
+      <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '24px' }}>
+        {[
+          ['# of Picks', filteredRows.length],
+          ['Draft Pick Value', totalPickValue.toFixed(1)],
+          ['Total Draft Score', totalScore.toFixed(1)],
+          ['Value Added', totalValueAdded.toFixed(1)],
+          ['Value Added %', valueAddedPct != null ? `${valueAddedPct.toFixed(1)}%` : '-'],
+        ].map(([label, value]) => (
+          <div key={label}>
+            <div style={{ fontSize: '12px', color: '#666' }}>{label}</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{value}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '24px' }}>
