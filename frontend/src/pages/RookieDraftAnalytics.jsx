@@ -46,8 +46,8 @@ function roundAxisMax50(best) {
 // yScale)` returns each chart's own data marks (circles, avatar images,
 // whatever) - the only thing that differs between them.
 function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
-  const width = 700
-  const height = 400
+  const width = 480
+  const height = 300
   const padding = { left: 55, right: 20, top: 16, bottom: 45 }
   const plotW = width - padding.left - padding.right
   const plotH = height - padding.top - padding.bottom
@@ -102,9 +102,9 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
         }
         return (
           <>
-            {diagonal(0.8, null, 0.4)}
+            {diagonal(0.75, null, 0.4)}
             {diagonal(1, 'y = x')}
-            {diagonal(1.2, null, 0.4)}
+            {diagonal(1.25, null, 0.4)}
           </>
         )
       })()}
@@ -573,17 +573,19 @@ export default function RookieDraftAnalytics() {
         </label>
       </div>
 
-      <h3 style={{ marginTop: '24px', marginBottom: '8px' }}>By Pick</h3>
-      <div>
-        <ScatterChart points={chartPoints} maxX={chartMaxX} maxY={chartMaxY} legend={chartLegend} onPointClick={openPlayer} />
-      </div>
+      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '24px' }}>
+        <div>
+          <h3 style={{ marginTop: 0, marginBottom: '8px' }}>By Pick</h3>
+          <ScatterChart points={chartPoints} maxX={chartMaxX} maxY={chartMaxY} legend={chartLegend} onPointClick={openPlayer} />
+        </div>
 
-      <h3 style={{ marginTop: '24px', marginBottom: '8px' }}>By User</h3>
-      <p style={{ color: '#666', fontSize: '14px', marginTop: 0 }}>
-        Click a user's avatar to filter the table and both charts to just them.
-      </p>
-      <div>
-        <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
+        <div>
+          <h3 style={{ marginTop: 0, marginBottom: '8px' }}>By User</h3>
+          <p style={{ color: '#666', fontSize: '14px', marginTop: 0 }}>
+            Click a user's avatar to filter the table and both charts to just them.
+          </p>
+          <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
+        </div>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
