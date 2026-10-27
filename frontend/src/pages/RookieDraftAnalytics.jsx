@@ -30,19 +30,15 @@ function roundAxisMax(best) {
   return Math.ceil((best + 1) / 10) * 10
 }
 
-// Plain inline SVG, no charting library - this is a simple scatter plot
-// (pick value vs. 3Yr score) and didn't seem worth adding a new
-// dependency for, especially one the Pi would need `npm install`-ed.
-// maxX/maxY are passed in rather than computed from `points` so the axes
-// can stay locked to the full unfiltered range even when only one
-// season's points are actually being plotted.
-function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
-  // Deliberately keyed off `legend` (every scored season, filter or not)
-  // rather than `points` - a year filter with zero picks still has real
-  // axis bounds from the other years and should render them locked and
-  // empty, not fall back to this "nothing at all" message.
-  if (legend.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
-
+// Shared grid/axes/y=x-line chrome for both charts below - plain inline
+// SVG, no charting library (didn't seem worth a new dependency,
+// especially one the Pi would need `npm install`-ed, for two simple
+// plots). maxX/maxY are passed in rather than computed from whatever's
+// plotted so the axes can stay locked to the full unfiltered range even
+// when a filter narrows what's actually drawn. `renderMarks(xScale,
+// yScale)` returns each chart's own data marks (circles, avatar images,
+// whatever) - the only thing that differs between them.
+function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
   const width = 700
   const height = 400
   const padding = { left: 55, right: 20, top: 16, bottom: 45 }
@@ -57,52 +53,67 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
   const yTicks = Array.from({ length: TICKS + 1 }, (_, i) => maxY * i / TICKS)
 
   return (
+    <svg width={width} height={height} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: '6px' }}>
+      {xTicks.map(v => (
+        <g key={`x${v}`}>
+          <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={padding.top + plotH} stroke="#eee" />
+          <text x={xScale(v)} y={padding.top + plotH + 18} fontSize="11" textAnchor="middle" fill="#666">{v.toFixed(0)}</text>
+        </g>
+      ))}
+      {yTicks.map(v => (
+        <g key={`y${v}`}>
+          <line x1={padding.left} y1={yScale(v)} x2={padding.left + plotW} y2={yScale(v)} stroke="#eee" />
+          <text x={padding.left - 8} y={yScale(v) + 4} fontSize="11" textAnchor="end" fill="#666">{v.toFixed(0)}</text>
+        </g>
+      ))}
+      <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotH} stroke="#999" />
+      <line x1={padding.left} y1={padding.top + plotH} x2={padding.left + plotW} y2={padding.top + plotH} stroke="#999" />
+      <text x={padding.left + plotW / 2} y={height - 6} fontSize="12" textAnchor="middle" fill="#333">{xLabel}</text>
+      <text
+        fontSize="12" textAnchor="middle" fill="#333"
+        transform={`translate(14, ${padding.top + plotH / 2}) rotate(-90)`}
+      >
+        {yLabel}
+      </text>
+      {(() => {
+        // y = x: landing exactly on this line means the total scored
+        // precisely what was expected (Value Added = 0) - above it
+        // overperformed, below it underperformed. Drawn only out to
+        // wherever it exits the plot's own bounds, since the two axes
+        // don't share a scale.
+        const d = Math.min(maxX, maxY)
+        return (
+          <>
+            <line
+              x1={xScale(0)} y1={yScale(0)} x2={xScale(d)} y2={yScale(d)}
+              stroke="#999" strokeWidth={1} strokeDasharray="5,4"
+            />
+            <text
+              x={xScale(d) - 4} y={yScale(d) - 6}
+              fontSize="11" textAnchor="end" fill="#999"
+            >
+              y = x
+            </text>
+          </>
+        )
+      })()}
+      {renderMarks(xScale, yScale)}
+    </svg>
+  )
+}
+
+function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
+  // Deliberately keyed off `legend` (every scored season, filter or not)
+  // rather than `points` - a year filter with zero picks still has real
+  // axis bounds from the other years and should render them locked and
+  // empty, not fall back to this "nothing at all" message.
+  if (legend.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
+
+  return (
     <div>
-      <svg width={width} height={height} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: '6px' }}>
-        {xTicks.map(v => (
-          <g key={`x${v}`}>
-            <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={padding.top + plotH} stroke="#eee" />
-            <text x={xScale(v)} y={padding.top + plotH + 18} fontSize="11" textAnchor="middle" fill="#666">{v.toFixed(0)}</text>
-          </g>
-        ))}
-        {yTicks.map(v => (
-          <g key={`y${v}`}>
-            <line x1={padding.left} y1={yScale(v)} x2={padding.left + plotW} y2={yScale(v)} stroke="#eee" />
-            <text x={padding.left - 8} y={yScale(v) + 4} fontSize="11" textAnchor="end" fill="#666">{v.toFixed(0)}</text>
-          </g>
-        ))}
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotH} stroke="#999" />
-        <line x1={padding.left} y1={padding.top + plotH} x2={padding.left + plotW} y2={padding.top + plotH} stroke="#999" />
-        <text x={padding.left + plotW / 2} y={height - 6} fontSize="12" textAnchor="middle" fill="#333">Pick Value</text>
-        <text
-          fontSize="12" textAnchor="middle" fill="#333"
-          transform={`translate(14, ${padding.top + plotH / 2}) rotate(-90)`}
-        >
-          3Yr Score
-        </text>
-        {(() => {
-          // y = x: a pick landing exactly on this line scored precisely
-          // what its class-adjusted slot expected (Value Added = 0) -
-          // above it overperformed, below it underperformed. Drawn only
-          // out to wherever it exits the plot's own bounds, since the two
-          // axes don't share a scale.
-          const d = Math.min(maxX, maxY)
-          return (
-            <>
-              <line
-                x1={xScale(0)} y1={yScale(0)} x2={xScale(d)} y2={yScale(d)}
-                stroke="#999" strokeWidth={1} strokeDasharray="5,4"
-              />
-              <text
-                x={xScale(d) - 4} y={yScale(d) - 6}
-                fontSize="11" textAnchor="end" fill="#999"
-              >
-                y = x
-              </text>
-            </>
-          )
-        })()}
-        {points.map((p, i) => (
+      <ChartFrame
+        maxX={maxX} maxY={maxY} xLabel="Pick Value" yLabel="3Yr Score"
+        renderMarks={(xScale, yScale) => points.map((p, i) => (
           <circle
             key={i}
             cx={xScale(p.x)}
@@ -118,7 +129,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
             <title>{`${p.label} (${p.season}) - Pick Value ${p.x.toFixed(1)}, 3Yr Score ${p.y.toFixed(1)}`}</title>
           </circle>
         ))}
-      </svg>
+      />
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '8px' }}>
         {legend.map(({ season, color }) => (
           <span key={season} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#666' }}>
@@ -128,6 +139,46 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
         ))}
       </div>
     </div>
+  )
+}
+
+// One point per user who's made a scored rookie pick - aggregate total
+// pick value (x) vs. total 3Yr score (y), marked with their own avatar
+// instead of a plain dot. A user with no avatar on file falls back to a
+// plain circle with their name's first letter.
+function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
+  if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
+  const SIZE = 26
+  const HALF = SIZE / 2
+
+  return (
+    <ChartFrame
+      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3Yr Score"
+      renderMarks={(xScale, yScale) => points.map((p, i) => {
+        const cx = xScale(p.x)
+        const cy = yScale(p.y)
+        const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3Yr Score ${p.y.toFixed(1)}`
+        return (
+          <g key={i} style={{ cursor: 'pointer' }} onClick={() => onPointClick(p.userId)}>
+            <title>{title}</title>
+            {p.avatar ? (
+              <image
+                href={p.avatar} x={cx - HALF} y={cy - HALF} width={SIZE} height={SIZE}
+                style={{ clipPath: 'circle(50%)' }}
+              />
+            ) : (
+              <>
+                <circle cx={cx} cy={cy} r={HALF} fill="#9ca3af" />
+                <text x={cx} y={cy + 4} fontSize="12" fontWeight="bold" textAnchor="middle" fill="#fff">
+                  {(p.label || '?')[0].toUpperCase()}
+                </text>
+              </>
+            )}
+            <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
+          </g>
+        )
+      })}
+    />
   )
 }
 
@@ -404,6 +455,30 @@ export default function RookieDraftAnalytics() {
   const scoredSeasons = [...new Set(scoredRows.map(r => r.season))].sort((a, b) => b - a)
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
+  // Every user who's made a scored rookie pick, with their pick values
+  // and 3Yr scores summed - same locked-axis treatment as the per-pick
+  // chart (bounds from every user regardless of the filters, points
+  // drawn from just the filtered ones), so e.g. narrowing to one draft
+  // class shows each user's total for just that class without the axes
+  // jumping around.
+  const aggregateByUser = rowsSubset => {
+    const totals = {}
+    rowsSubset.forEach(r => {
+      if (!r.userId) return
+      const t = (totals[r.userId] ??= {
+        userId: r.userId, label: r.userName || r.userId, avatar: r.userAvatar,
+        x: 0, y: 0,
+      })
+      t.x += r.pickValue
+      t.y += r.score
+    })
+    return Object.values(totals)
+  }
+  const allUserTotals = aggregateByUser(scoredRows)
+  const userChartMaxX = roundAxisMax(Math.max(...allUserTotals.map(u => u.x), 0))
+  const userChartMaxY = roundAxisMax(Math.max(...allUserTotals.map(u => u.y), 0))
+  const userChartPoints = aggregateByUser(scoredRows.filter(matchesFilters))
+
   const handleSort = (field) => {
     if (sortBy === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -464,8 +539,17 @@ export default function RookieDraftAnalytics() {
         </label>
       </div>
 
+      <h3 style={{ marginTop: '24px', marginBottom: '8px' }}>By Pick</h3>
       <div>
         <ScatterChart points={chartPoints} maxX={chartMaxX} maxY={chartMaxY} legend={chartLegend} onPointClick={openPlayer} />
+      </div>
+
+      <h3 style={{ marginTop: '24px', marginBottom: '8px' }}>By User</h3>
+      <p style={{ color: '#666', fontSize: '14px', marginTop: 0 }}>
+        Click a user's avatar to filter the table and both charts to just them.
+      </p>
+      <div>
+        <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '16px' }}>
