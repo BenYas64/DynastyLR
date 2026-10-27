@@ -10,7 +10,7 @@ export const WEEKS_PER_SEASON = 17
 // not. A season already fully played uses its real PAR total as-is. The
 // season still in progress (or one that hasn't started at all) fills in
 // the remaining-weeks fraction of its total from a stand-in FULL-SEASON
-// value derived from current dynasty value (dynasty rating / 9999 * 200)
+// value derived from current dynasty value (dynasty rating / 9999 * 250)
 // - an estimate of what a typical season "should" produce for a player
 // of that market value, not a real result. A season with no real weeks
 // played yet gets 100% of that substitute; one that's n/17 weeks in gets
@@ -22,7 +22,7 @@ export const WEEKS_PER_SEASON = 17
 // and player_id->{dynasty_value, ...}).
 export function threeYearDraftScore(rookiePar, rookieValues, currentNflWeek, draftSeason, playerId) {
   const dynastyValue = rookieValues[playerId]?.dynasty_value ?? 0
-  const substitutedSeasonValue = dynastyValue / 9999 * 200
+  const substitutedSeasonValue = dynastyValue / 9999 * 250
 
   let total = 0
   for (const year of [draftSeason, draftSeason + 1, draftSeason + 2]) {
