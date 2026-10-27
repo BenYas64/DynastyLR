@@ -21,6 +21,15 @@ function hashToUnit(key) {
   return (h % 1000) / 1000
 }
 
+// Axis max for the 5x5 grid below - rounded to a clean multiple of 10 so
+// the tick labels read as round numbers, but always strictly above the
+// all-time best (the +1 before rounding guarantees that even when the
+// best already lands exactly on a multiple of 10) and never more than
+// one 10-step above it, well inside the "not 20+ above" bound.
+function roundAxisMax(best) {
+  return Math.ceil((best + 1) / 10) * 10
+}
+
 // Plain inline SVG, no charting library - this is a simple scatter plot
 // (pick value vs. 3Yr score) and didn't seem worth adding a new
 // dependency for, especially one the Pi would need `npm install`-ed.
@@ -354,8 +363,8 @@ export default function RookieDraftAnalytics() {
   // Axis bounds come from EVERY scored pick regardless of either filter,
   // so switching years or users never rescales the chart - only which
   // points are actually drawn changes.
-  const chartMaxX = Math.max(...scoredRows.map(r => r.pickValue), 1) * 1.1
-  const chartMaxY = Math.max(...scoredRows.map(r => r.score), 1) * 1.1
+  const chartMaxX = roundAxisMax(Math.max(...scoredRows.map(r => r.pickValue), 0))
+  const chartMaxY = roundAxisMax(Math.max(...scoredRows.map(r => r.score), 0))
   // SVG paints later elements on top of earlier ones, so oldest-first
   // here means the most recent draft class ends up layered above older
   // ones wherever points overlap.
