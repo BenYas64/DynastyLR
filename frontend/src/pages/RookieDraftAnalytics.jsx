@@ -122,7 +122,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
   return (
     <div>
       <ChartFrame
-        maxX={maxX} maxY={maxY} xLabel="Pick Value" yLabel="3Yr Score"
+        maxX={maxX} maxY={maxY} xLabel="Pick Value" yLabel="3Yr PAR"
         renderMarks={(xScale, yScale) => points.map((p, i) => (
           <circle
             key={i}
@@ -136,7 +136,7 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
             style={{ cursor: 'pointer' }}
             onClick={() => onPointClick(p.playerId)}
           >
-            <title>{`${p.label} (${p.season}) - Pick Value ${p.x.toFixed(1)}, 3Yr Score ${p.y.toFixed(1)}`}</title>
+            <title>{`${p.label} (${p.season}) - Pick Value ${p.x.toFixed(1)}, 3Yr PAR ${p.y.toFixed(1)}`}</title>
           </circle>
         ))}
       />
@@ -153,9 +153,11 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
 }
 
 // One point per user who's made a scored rookie pick - aggregate total
-// pick value (x) vs. total 3Yr score (y), marked with their own avatar
+// pick value (x) vs. total 3Yr PAR (y), marked with their own avatar
 // instead of a plain dot. A user with no avatar on file falls back to a
-// plain circle with their name's first letter.
+// plain circle with their name's first letter. A tiny name label sits
+// just below each one, since avatars alone aren't reliably readable at
+// this size.
 function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
   if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
   const SIZE = 26
@@ -163,11 +165,11 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
 
   return (
     <ChartFrame
-      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3Yr Score"
+      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3Yr PAR"
       renderMarks={(xScale, yScale) => points.map((p, i) => {
         const cx = xScale(p.x)
         const cy = yScale(p.y)
-        const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3Yr Score ${p.y.toFixed(1)}`
+        const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3Yr PAR ${p.y.toFixed(1)}`
         return (
           <g key={i} style={{ cursor: 'pointer' }} onClick={() => onPointClick(p.userId)}>
             <title>{title}</title>
@@ -185,6 +187,9 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
               </>
             )}
             <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
+            <text x={cx} y={cy + HALF + 11} fontSize="9" textAnchor="middle" fill="#333">
+              {p.label}
+            </text>
           </g>
         )
       })}
@@ -384,7 +389,7 @@ export default function RookieDraftAnalytics() {
   // Pick values stay proportional to the base curve (pick 1 is always
   // twice pick 8, no matter the year) but get uniformly scaled per draft
   // class so that class's pick values sum to exactly that class's total
-  // 3Yr Score - a class with a lot of combined value gets inflated pick
+  // 3Yr PAR - a class with a lot of combined value gets inflated pick
   // values relative to the base curve, a weak class gets deflated ones.
   // Needs every pick in the class scored before it means anything, so a
   // class with any pick still loading shows '...' across the board.
@@ -525,10 +530,10 @@ export default function RookieDraftAnalytics() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       <h2>Rookie Draft Analytics</h2>
       <p style={{ color: '#666', fontSize: '14px' }}>
-        Every rookie-draft pick in this league's history ({rows.length} picks). 3Yr Score averages a player's
+        Every rookie-draft pick in this league's history ({rows.length} picks). 3Yr PAR averages a player's
         first 3 seasons' PAR, filling in any season not fully played yet from their current dynasty value.
         Pick Value follows a fixed curve by pick number (pick 1 is always twice pick 8) scaled per draft
-        class so that class's pick values add up to its total 3Yr Score - a stronger class's picks are worth
+        class so that class's pick values add up to its total 3Yr PAR - a stronger class's picks are worth
         more than the same slot in a weaker one.
       </p>
 
@@ -585,7 +590,7 @@ export default function RookieDraftAnalytics() {
               Dynasty Value{sortArrow('dynastyValue')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('score')}>
-              3Yr Score{sortArrow('score')}
+              3Yr PAR{sortArrow('score')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('pickValue')}>
               Pick Value{sortArrow('pickValue')}
