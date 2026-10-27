@@ -61,6 +61,28 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
         >
           3Yr Score
         </text>
+        {(() => {
+          // y = x: a pick landing exactly on this line scored precisely
+          // what its class-adjusted slot expected (Value Added = 0) -
+          // above it overperformed, below it underperformed. Drawn only
+          // out to wherever it exits the plot's own bounds, since the two
+          // axes don't share a scale.
+          const d = Math.min(maxX, maxY)
+          return (
+            <>
+              <line
+                x1={xScale(0)} y1={yScale(0)} x2={xScale(d)} y2={yScale(d)}
+                stroke="#999" strokeWidth={1} strokeDasharray="5,4"
+              />
+              <text
+                x={xScale(d) - 4} y={yScale(d) - 6}
+                fontSize="11" textAnchor="end" fill="#999"
+              >
+                Expected (y = x)
+              </text>
+            </>
+          )
+        })()}
         {points.map((p, i) => (
           <circle
             key={i}
