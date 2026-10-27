@@ -515,11 +515,10 @@ export default function RookieDraftAnalytics() {
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
   // Every user who's made a scored rookie pick, with their pick values
-  // and 3Yr scores summed - same locked-axis treatment as the per-pick
-  // chart (bounds from every user regardless of the filters, points
-  // drawn from just the filtered ones), so e.g. narrowing to one draft
-  // class shows each user's total for just that class without the axes
-  // jumping around.
+  // and 3Yr scores summed - unlike the per-pick chart, this one's axes
+  // rescale to whatever's actually plotted, so narrowing to one draft
+  // class or one user zooms in on just their totals instead of staying
+  // locked to the all-time scale.
   const aggregateByUser = rowsSubset => {
     const totals = {}
     rowsSubset.forEach(r => {
@@ -533,10 +532,9 @@ export default function RookieDraftAnalytics() {
     })
     return Object.values(totals)
   }
-  const allUserTotals = aggregateByUser(scoredRows)
-  const userChartMaxX = roundAxisMax50(Math.max(...allUserTotals.map(u => u.x), 0))
-  const userChartMaxY = roundAxisMax50(Math.max(...allUserTotals.map(u => u.y), 0))
   const userChartPoints = aggregateByUser(scoredRows.filter(matchesFilters))
+  const userChartMaxX = roundAxisMax50(Math.max(...userChartPoints.map(u => u.x), 0))
+  const userChartMaxY = roundAxisMax50(Math.max(...userChartPoints.map(u => u.y), 0))
 
   const handleSort = (field) => {
     if (sortBy === field) {
