@@ -470,10 +470,11 @@ export default function RookieDraftAnalytics() {
   const seasonOptions = [...new Set(rows.map(r => r.season))].sort((a, b) => b - a)
   const userOptions = [...new Map(rows.filter(r => r.userId).map(r => [r.userId, r.userName || r.userId])).entries()]
     .sort((a, b) => (a[1] || '').localeCompare(b[1] || ''))
+  const matchesRoundFilter = r => roundFilter === 'all' || roundForPick(r.pickNo) === Number(roundFilter)
   const matchesFilters = r =>
     (yearFilter === 'all' || r.season === Number(yearFilter)) &&
     (userFilter === 'all' || r.userId === userFilter) &&
-    (roundFilter === 'all' || roundForPick(r.pickNo) === Number(roundFilter))
+    matchesRoundFilter(r)
   const filteredRows = rows.filter(matchesFilters)
 
   const SORT_KEYS = {
@@ -515,11 +516,11 @@ export default function RookieDraftAnalytics() {
     label: r.player ? `${r.player.first_name} ${r.player.last_name}` : `Player ${r.playerId}`,
   })
 
-  // Axis bounds come from EVERY scored pick regardless of either filter,
-  // so switching years or users never rescales the chart - only which
-  // points are actually drawn changes.
-  const chartMaxX = roundAxisMax(Math.max(...scoredRows.map(r => r.pickValue), 0))
-  const chartMaxY = roundAxisMax(Math.max(...scoredRows.map(r => r.score), 0))
+  // Axis bounds rescale only with the round filter - switching the year
+  // or user filter never changes them, only which points are drawn.
+  const roundScopedRows = scoredRows.filter(matchesRoundFilter)
+  const chartMaxX = roundAxisMax(Math.max(...roundScopedRows.map(r => r.pickValue), 0))
+  const chartMaxY = roundAxisMax(Math.max(...roundScopedRows.map(r => r.score), 0))
   // SVG paints later elements on top of earlier ones, so oldest-first
   // here means the most recent draft class ends up layered above older
   // ones wherever points overlap.
@@ -528,10 +529,9 @@ export default function RookieDraftAnalytics() {
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
   // Every user who's made a scored rookie pick, with their pick values
-  // and 3Yr scores summed - unlike the per-pick chart, this one's axes
-  // rescale to whatever's actually plotted, so narrowing to one draft
-  // class or one user zooms in on just their totals instead of staying
-  // locked to the all-time scale.
+  // and 3Yr scores summed - same round-only axis rescaling as the
+  // per-pick chart above (year/user filters change which points are
+  // drawn, not the scale).
   const aggregateByUser = rowsSubset => {
     const totals = {}
     rowsSubset.forEach(r => {
@@ -546,8 +546,9 @@ export default function RookieDraftAnalytics() {
     return Object.values(totals)
   }
   const userChartPoints = aggregateByUser(scoredRows.filter(matchesFilters))
-  const userChartMaxX = roundAxisMax50(Math.max(...userChartPoints.map(u => u.x), 0))
-  const userChartMaxY = roundAxisMax50(Math.max(...userChartPoints.map(u => u.y), 0))
+  const userRoundScopedTotals = aggregateByUser(roundScopedRows)
+  const userChartMaxX = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.x), 0))
+  const userChartMaxY = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.y), 0))
 
   const handleSort = (field) => {
     if (sortBy === field) {
