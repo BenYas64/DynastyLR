@@ -21,6 +21,17 @@ function hashToUnit(key) {
   return (h % 1000) / 1000
 }
 
+// Round bucket for a pick, by fixed overall-pick-number ranges rather
+// than however many teams actually picked that round in a given year -
+// a pick #13 is always "2nd round" here even in a season with only 10
+// teams (where it would have actually been an early 3rd-round pick).
+function roundForPick(pickNo) {
+  if (pickNo <= 12) return 1
+  if (pickNo <= 24) return 2
+  if (pickNo <= 36) return 3
+  return 4
+}
+
 // Axis max for the 5x5 grid below - rounded to a clean multiple of 10 so
 // the tick labels read as round numbers, but always strictly above the
 // all-time best (the +1 before rounding guarantees that even when the
@@ -259,6 +270,7 @@ export default function RookieDraftAnalytics() {
   const [sortDir, setSortDir] = useState('desc')
   const [yearFilter, setYearFilter] = useState('all')
   const [userFilter, setUserFilter] = useState('all')
+  const [roundFilter, setRoundFilter] = useState('all')
 
   useEffect(() => {
     fetch(`${API}/current-week`)
@@ -460,7 +472,8 @@ export default function RookieDraftAnalytics() {
     .sort((a, b) => (a[1] || '').localeCompare(b[1] || ''))
   const matchesFilters = r =>
     (yearFilter === 'all' || r.season === Number(yearFilter)) &&
-    (userFilter === 'all' || r.userId === userFilter)
+    (userFilter === 'all' || r.userId === userFilter) &&
+    (roundFilter === 'all' || roundForPick(r.pickNo) === Number(roundFilter))
   const filteredRows = rows.filter(matchesFilters)
 
   const SORT_KEYS = {
@@ -592,6 +605,16 @@ export default function RookieDraftAnalytics() {
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
             <option value="all">All Users</option>
             {userOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', color: '#666' }}>Round:</span>
+          <select value={roundFilter} onChange={e => setRoundFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
+            <option value="all">All Rounds</option>
+            <option value="1">1st (Picks 1-12)</option>
+            <option value="2">2nd (Picks 13-24)</option>
+            <option value="3">3rd (Picks 25-36)</option>
+            <option value="4">4th+ (Picks 37+)</option>
           </select>
         </label>
       </div>
