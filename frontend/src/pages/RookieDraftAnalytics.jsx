@@ -9,7 +9,7 @@ const API = 'https://api.dynastylr.site'
 // Fixed categorical palette, cycled if there are ever more draft classes
 // than colors - assigned by season so a year's color never shifts as
 // more classes get added over time.
-const SEASON_COLORS = ['#dc2626', '#d97706', '#facc15', '#00fc2e', '#00a3cc', '#1900f8', '#d900ff']
+const SEASON_COLORS = ['#00fc2e', '#00a3cc', '#1900f8', '#d900ff','#dc2626', '#d97706', '#facc15']
 
 // Deterministic pseudo-random in [0, 1) from a string - used for chart
 // jitter below so a point's wiggle is stable across re-renders (sorting,
