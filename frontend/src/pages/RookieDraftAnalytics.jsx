@@ -9,7 +9,7 @@ const API = 'https://api.dynastylr.site'
 // Fixed categorical palette, cycled if there are ever more draft classes
 // than colors - assigned by season so a year's color never shifts as
 // more classes get added over time.
-const SEASON_COLORS = ['#00fc2e', '#00a3cc', '#1900f8', '#d900ff','#dc2626', '#d97706', '#facc15']
+const SEASON_COLORS = ['#dc2626', '#d97706', '#16a34a', '#2563eb', '#9333ea', '#0891b2', '#ec207c']
 
 // Deterministic pseudo-random in [0, 1) from a string - used for chart
 // jitter below so a point's wiggle is stable across re-renders (sorting,
@@ -19,17 +19,6 @@ function hashToUnit(key) {
   let h = 0
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
   return (h % 1000) / 1000
-}
-
-// Round bucket for a pick, by fixed overall-pick-number ranges rather
-// than however many teams actually picked that round in a given year -
-// a pick #13 is always "2nd round" here even in a season with only 10
-// teams (where it would have actually been an early 3rd-round pick).
-function roundForPick(pickNo) {
-  if (pickNo <= 12) return 1
-  if (pickNo <= 24) return 2
-  if (pickNo <= 36) return 3
-  return 4
 }
 
 // Axis max for the 5x5 grid below - rounded to a clean multiple of 10 so
@@ -56,9 +45,9 @@ function roundAxisMax50(best) {
 // when a filter narrows what's actually drawn. `renderMarks(xScale,
 // yScale)` returns each chart's own data marks (circles, avatar images,
 // whatever) - the only thing that differs between them.
-function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks, showLineLabels = true }) {
-  const width = 600
-  const height = 400
+function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks }) {
+  const width = 480
+  const height = 300
   const padding = { left: 55, right: 20, top: 16, bottom: 45 }
   const plotW = width - padding.left - padding.right
   const plotH = height - padding.top - padding.bottom
@@ -90,9 +79,10 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks, showLineLabels = 
       {(() => {
         // y = m*x from the origin, drawn only out to wherever it exits
         // the plot's own bounds (the two axes don't share a scale, so a
-        // slope-1 line doesn't necessarily reach a corner). "Expected" is
-        // where a total scored precisely what was expected (Value Added
-        // = 0); the lighter +/-25% lines mark a band around it.
+        // slope-1 line doesn't necessarily reach a corner). y = x itself
+        // is where a total scored precisely what was expected (Value
+        // Added = 0); the unlabeled, lighter 0.8x/1.2x lines mark a
+        // +/-20% band around it.
         const diagonal = (slope, label, opacity = 1) => {
           const exitX = Math.min(maxX, maxY / slope)
           const exitY = slope * exitX
@@ -102,8 +92,8 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks, showLineLabels = 
                 x1={xScale(0)} y1={yScale(0)} x2={xScale(exitX)} y2={yScale(exitY)}
                 stroke="#999" strokeOpacity={opacity} strokeWidth={1} strokeDasharray="5,4"
               />
-              {label && showLineLabels && (
-                <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999" fillOpacity={opacity}>
+              {label && (
+                <text x={xScale(exitX) - 4} y={yScale(exitY) - 6} fontSize="11" textAnchor="end" fill="#999">
                   {label}
                 </text>
               )}
@@ -112,9 +102,9 @@ function ChartFrame({ maxX, maxY, xLabel, yLabel, renderMarks, showLineLabels = 
         }
         return (
           <>
-            {diagonal(0.75, '-25%', 0.4)}
-            {diagonal(1, 'Expected')}
-            {diagonal(1.25, '+25%', 0.4)}
+            {diagonal(0.75, null, 0.4)}
+            {diagonal(1, 'y = x')}
+            {diagonal(1.25, null, 0.4)}
           </>
         )
       })()}
@@ -167,61 +157,35 @@ function ScatterChart({ points, maxX, maxY, legend, onPointClick }) {
 // pick value (x) vs. total 3yr PAR (y), marked with their own avatar
 // instead of a plain dot. A user with no avatar on file falls back to a
 // plain circle with their name's first letter. A tiny name label sits
-// near each one - below by default, but free to land above or to
-// either side instead, wherever it actually clears every avatar and
-// every other label.
+// just below each one, since avatars alone aren't reliably readable at
+// this size.
 function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
   if (points.length === 0) return <p style={{ color: '#666' }}>No scored picks to chart yet.</p>
   const SIZE = 26
   const HALF = SIZE / 2
-  const LABEL_H = 10
   const LABEL_STEP = 10
   const CHAR_WIDTH = 5
 
   return (
     <ChartFrame
-      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR" showLineLabels={false}
+      maxX={maxX} maxY={maxY} xLabel="Total Pick Value" yLabel="Total 3yr PAR"
       renderMarks={(xScale, yScale) => {
-        const avatars = points.map(p => ({ cx: xScale(p.x), cy: yScale(p.y) }))
-        const box = (x, y, halfW) => ({ left: x - halfW, right: x + halfW, top: y - LABEL_H / 2, bottom: y + LABEL_H / 2 })
-        const boxesOverlap = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
-        const hitsAvatar = (b, skipIndex) => avatars.some((a, j) =>
-          j !== skipIndex && a.cx + HALF > b.left && a.cx - HALF < b.right && a.cy + HALF > b.top && a.cy - HALF < b.bottom
-        )
-
-        const placedBoxes = []
+        // Greedy label stacking: a cluster of nearby avatars (common for
+        // an aggregate chart, since totals bunch up) would otherwise
+        // print their name labels right on top of each other - each new
+        // label drops further down, one step at a time, until it clears
+        // every label already placed near its x position.
+        const placed = []
         return points.map((p, i) => {
-          const { cx, cy } = avatars[i]
+          const cx = xScale(p.x)
+          const cy = yScale(p.y)
           const label = p.label || ''
           const halfW = Math.max(14, label.length * CHAR_WIDTH / 2)
-
-          // Below, above, right, left of this point's own avatar, in
-          // that preference order - first one that clears every avatar
-          // (not just this point's own) and every label placed so far
-          // wins. If none do (a genuinely crowded cluster), fall back to
-          // stacking further below, same as before.
-          const candidates = [
-            { x: cx, y: cy + HALF + 11 },
-            { x: cx, y: cy - HALF - 6 },
-            { x: cx + HALF + 4 + halfW, y: cy + 3 },
-            { x: cx - HALF - 4 - halfW, y: cy + 3 },
-          ]
-          let chosen = null
-          for (const c of candidates) {
-            const b = box(c.x, c.y, halfW)
-            if (!hitsAvatar(b, i) && !placedBoxes.some(pb => boxesOverlap(pb, b))) {
-              chosen = c
-              break
-            }
+          let labelY = cy + HALF + 11
+          while (placed.some(b => Math.abs(b.cx - cx) < (b.halfW + halfW) && Math.abs(b.y - labelY) < LABEL_STEP)) {
+            labelY += LABEL_STEP
           }
-          if (!chosen) {
-            let y = cy + HALF + 11
-            while (hitsAvatar(box(cx, y, halfW), i) || placedBoxes.some(pb => boxesOverlap(pb, box(cx, y, halfW)))) {
-              y += LABEL_STEP
-            }
-            chosen = { x: cx, y }
-          }
-          placedBoxes.push(box(chosen.x, chosen.y, halfW))
+          placed.push({ cx, halfW, y: labelY })
 
           const title = `${p.label} - Total Pick Value ${p.x.toFixed(1)}, Total 3yr PAR ${p.y.toFixed(1)}`
           return (
@@ -241,7 +205,7 @@ function UserAggregateChart({ points, maxX, maxY, onPointClick }) {
                 </>
               )}
               <circle cx={cx} cy={cy} r={HALF} fill="none" stroke="#1a1a2e" strokeWidth={1} />
-              <text x={chosen.x} y={chosen.y} fontSize="9" textAnchor="middle" fill="#333">
+              <text x={cx} y={labelY} fontSize="9" textAnchor="middle" fill="#333">
                 {label}
               </text>
             </g>
@@ -270,7 +234,6 @@ export default function RookieDraftAnalytics() {
   const [sortDir, setSortDir] = useState('desc')
   const [yearFilter, setYearFilter] = useState('all')
   const [userFilter, setUserFilter] = useState('all')
-  const [roundFilter, setRoundFilter] = useState('all')
 
   useEffect(() => {
     fetch(`${API}/current-week`)
@@ -470,21 +433,10 @@ export default function RookieDraftAnalytics() {
   const seasonOptions = [...new Set(rows.map(r => r.season))].sort((a, b) => b - a)
   const userOptions = [...new Map(rows.filter(r => r.userId).map(r => [r.userId, r.userName || r.userId])).entries()]
     .sort((a, b) => (a[1] || '').localeCompare(b[1] || ''))
-  const matchesRoundFilter = r => roundFilter === 'all' || roundForPick(r.pickNo) === Number(roundFilter)
   const matchesFilters = r =>
     (yearFilter === 'all' || r.season === Number(yearFilter)) &&
-    (userFilter === 'all' || r.userId === userFilter) &&
-    matchesRoundFilter(r)
+    (userFilter === 'all' || r.userId === userFilter)
   const filteredRows = rows.filter(matchesFilters)
-
-  // Summary stats for whatever's currently filtered - sums only over
-  // picks that are actually scored yet (pickValue/score null otherwise),
-  // same as every other total on this page.
-  const scoredFilteredRows = filteredRows.filter(r => r.pickValue != null && r.score != null)
-  const totalPickValue = scoredFilteredRows.reduce((sum, r) => sum + r.pickValue, 0)
-  const totalScore = scoredFilteredRows.reduce((sum, r) => sum + r.score, 0)
-  const totalValueAdded = scoredFilteredRows.reduce((sum, r) => sum + r.valueAdded, 0)
-  const valueAddedPct = totalPickValue > 0 ? (totalValueAdded / totalPickValue) * 100 : null
 
   const SORT_KEYS = {
     season: r => r.season,
@@ -525,11 +477,11 @@ export default function RookieDraftAnalytics() {
     label: r.player ? `${r.player.first_name} ${r.player.last_name}` : `Player ${r.playerId}`,
   })
 
-  // Axis bounds rescale only with the round filter - switching the year
-  // or user filter never changes them, only which points are drawn.
-  const roundScopedRows = scoredRows.filter(matchesRoundFilter)
-  const chartMaxX = roundAxisMax(Math.max(...roundScopedRows.map(r => r.pickValue), 0))
-  const chartMaxY = roundAxisMax(Math.max(...roundScopedRows.map(r => r.score), 0))
+  // Axis bounds come from EVERY scored pick regardless of either filter,
+  // so switching years or users never rescales the chart - only which
+  // points are actually drawn changes.
+  const chartMaxX = roundAxisMax(Math.max(...scoredRows.map(r => r.pickValue), 0))
+  const chartMaxY = roundAxisMax(Math.max(...scoredRows.map(r => r.score), 0))
   // SVG paints later elements on top of earlier ones, so oldest-first
   // here means the most recent draft class ends up layered above older
   // ones wherever points overlap.
@@ -538,9 +490,11 @@ export default function RookieDraftAnalytics() {
   const chartLegend = scoredSeasons.map(s => ({ season: s, color: colorForSeason(s) }))
 
   // Every user who's made a scored rookie pick, with their pick values
-  // and 3Yr scores summed - same round-only axis rescaling as the
-  // per-pick chart above (year/user filters change which points are
-  // drawn, not the scale).
+  // and 3Yr scores summed - same locked-axis treatment as the per-pick
+  // chart (bounds from every user regardless of the filters, points
+  // drawn from just the filtered ones), so e.g. narrowing to one draft
+  // class shows each user's total for just that class without the axes
+  // jumping around.
   const aggregateByUser = rowsSubset => {
     const totals = {}
     rowsSubset.forEach(r => {
@@ -554,10 +508,10 @@ export default function RookieDraftAnalytics() {
     })
     return Object.values(totals)
   }
+  const allUserTotals = aggregateByUser(scoredRows)
+  const userChartMaxX = roundAxisMax50(Math.max(...allUserTotals.map(u => u.x), 0))
+  const userChartMaxY = roundAxisMax50(Math.max(...allUserTotals.map(u => u.y), 0))
   const userChartPoints = aggregateByUser(scoredRows.filter(matchesFilters))
-  const userRoundScopedTotals = aggregateByUser(roundScopedRows)
-  const userChartMaxX = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.x), 0))
-  const userChartMaxY = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.y), 0))
 
   const handleSort = (field) => {
     if (sortBy === field) {
@@ -617,31 +571,6 @@ export default function RookieDraftAnalytics() {
             {userOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
         </label>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '14px', color: '#666' }}>Round:</span>
-          <select value={roundFilter} onChange={e => setRoundFilter(e.target.value)} style={{ padding: '6px', fontSize: '14px' }}>
-            <option value="all">All Rounds</option>
-            <option value="1">1st (Picks 1-12)</option>
-            <option value="2">2nd (Picks 13-24)</option>
-            <option value="3">3rd (Picks 25-36)</option>
-            <option value="4">4th+ (Picks 37+)</option>
-          </select>
-        </label>
-      </div>
-
-      <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', marginBottom: '24px' }}>
-        {[
-          ['# of Picks', filteredRows.length],
-          ['Draft Pick Value', totalPickValue.toFixed(1)],
-          ['Total Draft Score', totalScore.toFixed(1)],
-          ['Value Added', totalValueAdded.toFixed(1)],
-          ['Value Added %', valueAddedPct != null ? `${valueAddedPct.toFixed(1)}%` : '-'],
-        ].map(([label, value]) => (
-          <div key={label}>
-            <div style={{ fontSize: '12px', color: '#666' }}>{label}</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{value}</div>
-          </div>
-        ))}
       </div>
 
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '24px' }}>
@@ -652,6 +581,9 @@ export default function RookieDraftAnalytics() {
 
         <div>
           <h3 style={{ marginTop: 0, marginBottom: '8px' }}>By User</h3>
+          <p style={{ color: '#666', fontSize: '14px', marginTop: 0 }}>
+            Click a user's avatar to filter the table and both charts to just them.
+          </p>
           <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
         </div>
       </div>
