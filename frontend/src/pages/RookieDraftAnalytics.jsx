@@ -515,10 +515,13 @@ export default function RookieDraftAnalytics() {
   const toPoint = r => ({
     x: r.pickValue,
     y: r.score,
-    // Display-only nudge (+/-1pt) so same/close-scoring picks don't sit
-    // exactly on top of each other - never fed into tooltips, sorting,
-    // or the y=x line, only the plotted dot position.
-    jitterY: (hashToUnit(r.playerId) - 0.5) * 2,
+    // Display-only nudge so same/close-scoring picks don't sit exactly
+    // on top of each other - never fed into tooltips, sorting, or the
+    // y=x line, only the plotted dot position. Scaled to the y axis's
+    // current max (+/-0.5% of it) rather than a fixed point amount, so
+    // the nudge stays proportionally the same size as the chart's scale
+    // changes with the round filter.
+    jitterY: (hashToUnit(r.playerId) - 0.5) * 2 * chartMaxY * 0.005,
     season: r.season,
     color: colorForSeason(r.season),
     playerId: r.playerId,
