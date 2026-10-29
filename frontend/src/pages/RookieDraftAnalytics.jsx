@@ -438,7 +438,7 @@ export default function RookieDraftAnalytics() {
       dynastyValue: rookieValues[pick.playerId]?.dynasty_value,
       yearPar: years.map(year => rookiePar[year]?.[pick.playerId]),
       yearRank: years.map(year => rookieRank[year]?.[pick.playerId]),
-      basePickValue: pickValue(pick.pickNo),
+      basePickValue: pickValue(pick.pickNo, pick.season),
     }
   })
 
