@@ -82,13 +82,14 @@ const PICK_VALUE_TABLE = {
 // Rookie pick value curve, pre PAR-based class-strength rescaling
 // (that happens downstream, on the already-looked-up/computed base
 // value - see RookieDraftAnalytics.jsx). A draft class with hand-set
-// values in PICK_VALUE_TABLE above uses those directly for picks 1-60;
-// any other season, or a pick past #60 even in a covered season, falls
-// back to the fixed formula (same for every uncovered class, no
-// season dependency), where pick #1 is always 100 and value decays
-// smoothly from there.
+// values in PICK_VALUE_TABLE above blends those 75% with the fixed
+// formula's own 25%, for picks 1-60; any other season, or a pick past
+// #60 even in a covered season, uses the formula alone (same for
+// every uncovered class, no season dependency), where pick #1 is
+// always 100 and value decays smoothly from there.
 export function pickValue(pickNo, season) {
+  const formulaValue = 75 * Math.pow(0.5, pickNo / 12 - 1 / 12) + 25 * Math.pow(0.25, pickNo - 1)
   const tableValue = PICK_VALUE_TABLE[season]?.[pickNo - 1]
-  if (tableValue != null) return tableValue
-  return 75 * Math.pow(0.5, pickNo / 12 - 1 / 12) + 25 * Math.pow(0.25, pickNo - 1)
+  if (tableValue == null) return formulaValue
+  return 0.75 * tableValue + 0.25 * formulaValue
 }
