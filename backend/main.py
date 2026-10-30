@@ -114,18 +114,20 @@ def position_week_ranks(db, league, season, position):
     _position_rank_cache[cache_key] = {"computed_at": now, "ranks": ranks}
     return ranks
 
-def cached_position_week_par(db, league, season, position):
+def cached_position_week_par(db, league, season, position, num_teams_override=None):
     """Same caching shape as position_week_ranks, for
     scoring.position_week_par - keyed by league too (unlike ranks, PAR
     depends on the league's scoring AND roster construction, not just
-    scoring)."""
-    cache_key = (league.league_id if league else None, season, position)
+    scoring), and by num_teams_override too so a real-league lookup and a
+    fixed-team-count lookup for the same league/season/position never
+    collide in the cache."""
+    cache_key = (league.league_id if league else None, season, position, num_teams_override)
     cached = _par_cache.get(cache_key)
     now = time.time()
     if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
         return cached["par"]
 
-    par = position_week_par(db, league, season, position)
+    par = position_week_par(db, league, season, position, num_teams_override=num_teams_override)
     _par_cache[cache_key] = {"computed_at": now, "par": par}
     return par
 
@@ -389,7 +391,11 @@ def get_points_above_replacement_totals(league_id: str, season: int, ids: str, d
     """Bulk season-total PAR for a list of players, reusing the same
     per-position cache (one query per distinct position among `ids`, not
     one per player) - built for the draft page's rookie-class columns,
-    which need this for dozens of players at once."""
+    which need this for dozens of players at once. Fixed at a 12-team
+    replacement baseline (not this league's own total_rosters) so PAR
+    stays comparable across draft classes even though WCXC Dynasty itself
+    grew from 10 to 12 teams partway through - see
+    scoring.position_week_par's docstring."""
     league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
@@ -406,7 +412,7 @@ def get_points_above_replacement_totals(league_id: str, season: int, ids: str, d
             totals[player_id] = 0.0
             continue
         if position not in par_by_position:
-            par_by_position[position] = cached_position_week_par(db, league, season, position)
+            par_by_position[position] = cached_position_week_par(db, league, season, position, num_teams_override=12)
         totals[player_id] = sum(par_by_position[position].get(player_id, {}).values())
     return totals
 
@@ -417,7 +423,9 @@ def get_points_above_replacement_rank(league_id: str, season: int, ids: str, db:
     draft page color a pick by how many other draftable players that
     season's PAR actually outscored, not an arbitrary rate cutoff. A
     player with no PAR data at all that season (never recorded a stat at
-    any of those positions) gets no rank, i.e. below everyone who has one."""
+    any of those positions) gets no rank, i.e. below everyone who has one.
+    Same fixed 12-team baseline as the totals endpoint above, for the same
+    cross-draft-class comparability reason."""
     league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
@@ -427,7 +435,7 @@ def get_points_above_replacement_rank(league_id: str, season: int, ids: str, db:
 
     totals = []
     for position in replacement_starter_counts(league):
-        par = cached_position_week_par(db, league, season, position)
+        par = cached_position_week_par(db, league, season, position, num_teams_override=12)
         totals.extend((player_id, sum(weekly.values())) for player_id, weekly in par.items())
     totals.sort(key=lambda t: t[1], reverse=True)
 

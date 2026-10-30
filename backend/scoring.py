@@ -37,12 +37,14 @@ FLEX_SPLITS = {
     "SUPER_FLEX": {"QB": 0.95, "RB": 0.03, "WR": 0.015, "TE": 0.005},
 }
 
-def replacement_starter_counts(league):
+def replacement_starter_counts(league, num_teams_override=None):
     """How many starters exist leaguewide at each offensive skill position -
     base single-position slots plus an estimated share of any flex-type
     slot eligible for it (see FLEX_SPLITS). The player ranked just below
     this count at a position, for a given week, is the replacement level
-    points-above-replacement is measured against."""
+    points-above-replacement is measured against. num_teams_override lets a
+    caller fix the team count instead of using this league's own
+    total_rosters - see position_week_par's docstring for why."""
     if not league or not league.roster_positions:
         return {}
     positions = json.loads(league.roster_positions)
@@ -53,10 +55,10 @@ def replacement_starter_counts(league):
         elif slot in FLEX_SPLITS:
             for pos, share in FLEX_SPLITS[slot].items():
                 per_team[pos] += share
-    num_teams = league.total_rosters or 12
+    num_teams = num_teams_override or league.total_rosters or 12
     return {pos: max(1, round(n * num_teams)) for pos, n in per_team.items()}
 
-def position_week_par(db, league, season, position, model=Stat):
+def position_week_par(db, league, season, position, model=Stat, num_teams_override=None):
     """Per-player points above replacement at `position`, for every week of
     a season at once - computed live from the league's own scoring and
     roster construction (same as scoring_expression itself), not stored,
@@ -65,8 +67,19 @@ def position_week_par(db, league, season, position, model=Stat):
     score of the player ranked just below replacement_starter_counts'
     estimate for that position; below it counts as 0, never negative.
     Week 18 is excluded entirely - no league here plays a fantasy week
-    that late, so it shouldn't count toward a season PAR total."""
-    n = replacement_starter_counts(league).get(position)
+    that late, so it shouldn't count toward a season PAR total.
+
+    num_teams_override fixes the team count used for the replacement-level
+    cutoff instead of this league's own total_rosters - used by the rookie
+    draft pages (see main.py), which fix it at 12 so a player's PAR is
+    comparable across draft classes regardless of how many teams that
+    particular season's league actually had (WCXC Dynasty grew from 10
+    teams in 2023/2024 to 12 in 2025/2026, which would otherwise make
+    earlier classes' PAR look artificially low next to later ones). The
+    player page intentionally keeps using each league's real total_rosters,
+    since it's showing that league's own actual replacement level, not
+    comparing across draft classes."""
+    n = replacement_starter_counts(league, num_teams_override).get(position)
     if not n:
         return {}
 
