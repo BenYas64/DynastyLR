@@ -562,6 +562,14 @@ export default function RookieDraftAnalytics() {
   const userChartMaxX = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.x), 0))
   const userChartMaxY = roundAxisMax50(Math.max(...userRoundScopedTotals.map(u => u.y), 0))
 
+  // Clicking a user's avatar on the By User chart filters to just them -
+  // clicking the same one again toggles back to "All Users" instead of
+  // re-applying the same filter. Year and round filters are untouched
+  // either way.
+  const handleUserChartClick = (userId) => {
+    setUserFilter(f => f === userId ? 'all' : userId)
+  }
+
   const handleSort = (field) => {
     if (sortBy === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -655,7 +663,7 @@ export default function RookieDraftAnalytics() {
 
         <div>
           <h3 style={{ marginTop: 0, marginBottom: '8px' }}>By User</h3>
-          <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={setUserFilter} />
+          <UserAggregateChart points={userChartPoints} maxX={userChartMaxX} maxY={userChartMaxY} onPointClick={handleUserChartClick} />
         </div>
       </div>
 
