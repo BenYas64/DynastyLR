@@ -122,14 +122,19 @@ def cached_position_week_par(db, league, season, position, num_teams_override=No
     depends on the league's scoring AND roster construction, not just
     scoring), and by num_teams_override too so a real-league lookup and a
     fixed-team-count lookup for the same league/season/position never
-    collide in the cache."""
+    collide in the cache. Caps at last_complete_week(season) (None, i.e. no
+    cap, for a season that isn't the live one) so a player isn't credited
+    PAR for the in-progress week before it's final - same reasoning as
+    /weekly-scores. Not part of the cache key: the 1-hour TTL already
+    covers the tiny staleness window right at a week's Tuesday 1am cutover."""
     cache_key = (league.league_id if league else None, season, position, num_teams_override)
     cached = _par_cache.get(cache_key)
     now = time.time()
     if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
         return cached["par"]
 
-    par = position_week_par(db, league, season, position, num_teams_override=num_teams_override)
+    max_week = last_complete_week(season)
+    par = position_week_par(db, league, season, position, num_teams_override=num_teams_override, max_week=max_week)
     _par_cache[cache_key] = {"computed_at": now, "par": par}
     return par
 
@@ -640,14 +645,12 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
     The active season's schedule is synced in full up front, so weeks that
     haven't been played yet already have a Matchup row sitting at 0 points -
     those, and the week currently in progress, are excluded for whichever
-    chain entry is_current_season (week > last_complete_week()) - or they'd
-    flood the bottom-of-the-list end with fake "worst weeks" that are really
-    just the future or an unfinished one."""
+    chain entry is_current_season (week > last_complete_week(season)) - or
+    they'd flood the bottom-of-the-list end with fake "worst weeks" that
+    are really just the future or an unfinished one."""
     chain = league_chain(db, league_id)
     if chain is None:
         raise HTTPException(status_code=404, detail="League not found")
-
-    complete_week = last_complete_week()
 
     matchups = (
         db.query(Matchup)
@@ -655,10 +658,15 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
         .all()
     )
     matchups = paired_matchups(matchups)
-    matchups = [
-        m for m in matchups
-        if not (is_current_season(db, chain[m.league_id]) and m.week > complete_week)
-    ]
+
+    def is_not_yet_complete(m):
+        league = chain[m.league_id]
+        if not is_current_season(db, league):
+            return False
+        complete_week = last_complete_week(league.season)
+        return complete_week is not None and m.week > complete_week
+
+    matchups = [m for m in matchups if not is_not_yet_complete(m)]
 
     rosters = db.query(Roster).filter(Roster.league_id.in_(chain.keys())).all()
     owner_by_roster = {(r.league_id, r.roster_id): r.owner_id for r in rosters}
@@ -1035,7 +1043,23 @@ def get_matchups(league_id: str, week: int, db: Session = Depends(get_db)):
         for m in matchups
     ]
 
-_nfl_state_cache = {"computed_at": 0, "week": None}
+_nfl_state_cache = {"computed_at": 0, "week": None, "season": None}
+
+def _refresh_nfl_state():
+    now = time.time()
+    if _nfl_state_cache["week"] is not None and now - _nfl_state_cache["computed_at"] < CACHE_TTL_SECONDS:
+        return
+    week = _nfl_state_cache["week"] or 1
+    season = _nfl_state_cache["season"]
+    try:
+        resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
+        resp.raise_for_status()
+        state = resp.json()
+        week = state.get("week") or week if state.get("season_type") == "regular" else 1
+        season = state.get("season") or season
+    except Exception:
+        pass
+    _nfl_state_cache.update({"computed_at": now, "week": week, "season": season})
 
 def current_nfl_week():
     """Sleeper's own notion of 'what week is it right now', used to pick the
@@ -1044,30 +1068,37 @@ def current_nfl_week():
     Sleeper's "week" is only meaningful once season_type is "regular" -
     during preseason it's a preseason week count (e.g. week 2 of preseason)
     that doesn't correspond to any league matchup, so week 1 is used instead."""
-    now = time.time()
-    if _nfl_state_cache["week"] is not None and now - _nfl_state_cache["computed_at"] < CACHE_TTL_SECONDS:
-        return _nfl_state_cache["week"]
-    week = _nfl_state_cache["week"] or 1
-    try:
-        resp = requests.get("https://api.sleeper.app/v1/state/nfl", timeout=10)
-        resp.raise_for_status()
-        state = resp.json()
-        week = state.get("week") or week if state.get("season_type") == "regular" else 1
-    except Exception:
-        pass
-    _nfl_state_cache.update({"computed_at": now, "week": week})
-    return week
+    _refresh_nfl_state()
+    return _nfl_state_cache["week"]
 
-def last_complete_week():
-    """The most recent week whose results are safe to treat as final -
-    current_nfl_week() - 1, EXCEPT during the gap between Sleeper's own
-    week counter ticking over (sometime Monday night/Tuesday, once Monday
-    Night Football ends) and finalize_week.py's Tuesday 1am cron actually
-    running recompute_season_records for that week. Sleeper's counter can
-    tick over before our own finalize job has run, so for that narrow
-    window the week current_nfl_week() - 1 points at isn't "complete" yet
-    either - used by /weekly-scores so an all-time best/worst list doesn't
-    show a week's score before it's actually final."""
+def current_nfl_season():
+    """Sleeper's own notion of which season is live right now - same state
+    current_nfl_week() reads. Lets a caller that only has a bare season
+    number (not a League row) - like PAR's season param, which can be
+    asked about any past draft class regardless of which league is
+    currently selected - tell "the active season" apart from an already-
+    complete historical one."""
+    _refresh_nfl_state()
+    return _nfl_state_cache["season"]
+
+def last_complete_week(season):
+    """The most recent week of `season` whose results are safe to treat as
+    final - current_nfl_week() - 1, EXCEPT during the gap between Sleeper's
+    own week counter ticking over (sometime Monday night/Tuesday, once
+    Monday Night Football ends) and finalize_week.py's Tuesday 1am cron
+    actually running recompute_season_records for that week. Sleeper's
+    counter can tick over before our own finalize job has run, so for that
+    narrow window the week current_nfl_week() - 1 points at isn't
+    "complete" yet either.
+
+    Returns None - no cutoff, every week is fair game - if `season` isn't
+    the live season at all: an already-finished historical season has
+    nothing left to wait on, and a season in the future has no weeks yet
+    regardless. Used by /weekly-scores (an all-time best/worst list
+    shouldn't show a week's score before it's final) and PAR (shouldn't
+    credit a player for a week's production before it's final either)."""
+    if season != current_nfl_season():
+        return None
     week = current_nfl_week() - 1
     now_et = datetime.now(ZoneInfo("America/New_York"))
     before_tuesday_1am = now_et.weekday() == 0 or (now_et.weekday() == 1 and now_et.hour < 1)

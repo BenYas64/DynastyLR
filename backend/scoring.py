@@ -58,7 +58,7 @@ def replacement_starter_counts(league, num_teams_override=None):
     num_teams = num_teams_override or league.total_rosters or 12
     return {pos: max(1, round(n * num_teams)) for pos, n in per_team.items()}
 
-def position_week_par(db, league, season, position, model=Stat, num_teams_override=None):
+def position_week_par(db, league, season, position, model=Stat, num_teams_override=None, max_week=None):
     """Per-player points above replacement at `position`, for every week of
     a season at once - computed live from the league's own scoring and
     roster construction (same as scoring_expression itself), not stored,
@@ -78,17 +78,26 @@ def position_week_par(db, league, season, position, model=Stat, num_teams_overri
     earlier classes' PAR look artificially low next to later ones). The
     player page intentionally keeps using each league's real total_rosters,
     since it's showing that league's own actual replacement level, not
-    comparing across draft classes."""
+    comparing across draft classes.
+
+    max_week, if given, additionally drops any week beyond it - the live
+    season's currently in-progress week isn't final yet (see main.py's
+    last_complete_week), so a player shouldn't be credited PAR for it, nor
+    should it skew that week's replacement level for every other player at
+    the position. A historical season's caller passes None (no cap -
+    there's nothing left to wait on)."""
     n = replacement_starter_counts(league, num_teams_override).get(position)
     if not n:
         return {}
 
-    rows = (
+    query = (
         db.query(model.player_id, model.week, scoring_expression(league, model))
         .join(Player, Player.player_id == model.player_id)
         .filter(model.season == season, model.season_type == "regular", model.week != 18, Player.position == position)
-        .all()
     )
+    if max_week is not None:
+        query = query.filter(model.week <= max_week)
+    rows = query.all()
 
     by_week = {}
     for player_id, week, pts in rows:
