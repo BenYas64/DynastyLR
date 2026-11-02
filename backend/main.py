@@ -1,5 +1,7 @@
 import json
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import requests
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -622,14 +624,15 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
 
     The active season's schedule is synced in full up front, so weeks that
     haven't been played yet already have a Matchup row sitting at 0 points -
-    those are excluded (week >= current_nfl_week(), only for whichever chain
-    entry is_current_season), or they'd flood the bottom-of-the-list end with
-    fake "worst weeks" that are really just the future."""
+    those, and the week currently in progress, are excluded for whichever
+    chain entry is_current_season (week > last_complete_week()) - or they'd
+    flood the bottom-of-the-list end with fake "worst weeks" that are really
+    just the future or an unfinished one."""
     chain = league_chain(db, league_id)
     if chain is None:
         raise HTTPException(status_code=404, detail="League not found")
 
-    live_week = current_nfl_week()
+    complete_week = last_complete_week()
 
     matchups = (
         db.query(Matchup)
@@ -638,7 +641,7 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
     )
     matchups = [
         m for m in matchups
-        if not (is_current_season(db, chain[m.league_id]) and m.week >= live_week)
+        if not (is_current_season(db, chain[m.league_id]) and m.week > complete_week)
     ]
 
     rosters = db.query(Roster).filter(Roster.league_id.in_(chain.keys())).all()
@@ -1037,6 +1040,23 @@ def current_nfl_week():
     except Exception:
         pass
     _nfl_state_cache.update({"computed_at": now, "week": week})
+    return week
+
+def last_complete_week():
+    """The most recent week whose results are safe to treat as final -
+    current_nfl_week() - 1, EXCEPT during the gap between Sleeper's own
+    week counter ticking over (sometime Monday night/Tuesday, once Monday
+    Night Football ends) and finalize_week.py's Tuesday 1am cron actually
+    running recompute_season_records for that week. Sleeper's counter can
+    tick over before our own finalize job has run, so for that narrow
+    window the week current_nfl_week() - 1 points at isn't "complete" yet
+    either - used by /weekly-scores so an all-time best/worst list doesn't
+    show a week's score before it's actually final."""
+    week = current_nfl_week() - 1
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    before_tuesday_1am = now_et.weekday() == 0 or (now_et.weekday() == 1 and now_et.hour < 1)
+    if before_tuesday_1am:
+        week -= 1
     return week
 
 def week_editable(db, league, week):
