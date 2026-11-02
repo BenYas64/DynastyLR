@@ -610,15 +610,30 @@ def get_head_to_head(league_id: str, db: Session = Depends(get_db)):
 
     return result
 
+def paired_matchups(matchups):
+    """Only the Matchup rows that were part of a genuine two-team pairing
+    that week - a bye (no matchup_id at all, or a lone entry not sharing
+    its matchup_id with exactly one other roster - e.g. a playoff bracket
+    bye round, or a Guillotine-style league where teams aren't paired up
+    every week) isn't a real week for that team and is dropped. Same
+    two-roster rule get_head_to_head already uses for its own records."""
+    games = {}
+    for m in matchups:
+        if m.matchup_id is None:
+            continue
+        key = (m.league_id, m.week, m.matchup_id)
+        games.setdefault(key, []).append(m)
+    return [m for group in games.values() if len(group) == 2 for m in group]
+
 @app.get("/league/{league_id}/weekly-scores")
 def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
     """Every real individual weekly score across this league's full season
     history (same rollover chain as /head-to-head) - one row per roster per
-    week with a recorded point total, including playoff weeks and any bye
-    entry. Unlike head-to-head, this isn't about who won; it's raw single-week
-    production, so there's no two-roster/matchup_id requirement. Team name and
-    avatar are resolved against THAT row's own season (LeagueUser is a new row
-    each season, so a manager's current team name shouldn't be stamped onto a
+    week with a recorded point total, playoff weeks included but a bye week
+    excluded (see paired_matchups). Unlike head-to-head, this isn't about
+    who won, just raw single-week production. Team name and avatar are
+    resolved against THAT row's own season (LeagueUser is a new row each
+    season, so a manager's current team name shouldn't be stamped onto a
     score from a season before they used it) - used for the all-time
     best/worst single-week performances list on the head-to-head page.
 
@@ -639,6 +654,7 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
         .filter(Matchup.league_id.in_(chain.keys()), Matchup.points.isnot(None), Matchup.week != 18)
         .all()
     )
+    matchups = paired_matchups(matchups)
     matchups = [
         m for m in matchups
         if not (is_current_season(db, chain[m.league_id]) and m.week > complete_week)
