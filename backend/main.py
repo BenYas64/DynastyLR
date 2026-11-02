@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
-from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts, rescaled_trade_values
+from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts, rescaled_trade_values, is_current_season
 
 app = FastAPI()
 
@@ -604,6 +604,75 @@ def get_head_to_head(league_id: str, db: Session = Depends(get_db)):
             "points_1": round(rec["points"][r1], 2),
             "points_2": round(rec["points"][r2], 2),
             "total_games": rec["total"],
+        })
+
+    return result
+
+@app.get("/league/{league_id}/weekly-scores")
+def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
+    """Every real individual weekly score across this league's full season
+    history (same rollover chain as /head-to-head) - one row per roster per
+    week with a recorded point total, including playoff weeks and any bye
+    entry. Unlike head-to-head, this isn't about who won; it's raw single-week
+    production, so there's no two-roster/matchup_id requirement. Team name and
+    avatar are resolved against THAT row's own season (LeagueUser is a new row
+    each season, so a manager's current team name shouldn't be stamped onto a
+    score from a season before they used it) - used for the all-time
+    best/worst single-week performances list on the head-to-head page.
+
+    The active season's schedule is synced in full up front, so weeks that
+    haven't been played yet already have a Matchup row sitting at 0 points -
+    those are excluded (week >= current_nfl_week(), only for whichever chain
+    entry is_current_season), or they'd flood the bottom-of-the-list end with
+    fake "worst weeks" that are really just the future."""
+    chain = league_chain(db, league_id)
+    if chain is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    live_week = current_nfl_week()
+
+    matchups = (
+        db.query(Matchup)
+        .filter(Matchup.league_id.in_(chain.keys()), Matchup.points.isnot(None), Matchup.week != 18)
+        .all()
+    )
+    matchups = [
+        m for m in matchups
+        if not (is_current_season(db, chain[m.league_id]) and m.week >= live_week)
+    ]
+
+    rosters = db.query(Roster).filter(Roster.league_id.in_(chain.keys())).all()
+    owner_by_roster = {(r.league_id, r.roster_id): r.owner_id for r in rosters}
+
+    user_rows = (
+        db.query(LeagueUser, User.avatar)
+        .outerjoin(User, User.user_id == LeagueUser.user_id)
+        .filter(LeagueUser.league_id.in_(chain.keys()))
+        .all()
+    )
+    user_by_league = {
+        (lu.league_id, lu.user_id): {
+            "team_name": lu.team_name,
+            "display_name": lu.display_name,
+            "team_avatar": lu.team_avatar,
+            "avatar": avatar,
+        }
+        for lu, avatar in user_rows
+    }
+
+    result = []
+    for m in matchups:
+        owner_id = owner_by_roster.get((m.league_id, m.roster_id))
+        user = user_by_league.get((m.league_id, owner_id), {})
+        result.append({
+            "season": chain[m.league_id].season,
+            "week": m.week,
+            "points": round(m.points, 2),
+            "roster_id": m.roster_id,
+            "team_name": user.get("team_name"),
+            "display_name": user.get("display_name"),
+            "team_avatar": user.get("team_avatar"),
+            "avatar": user.get("avatar"),
         })
 
     return result

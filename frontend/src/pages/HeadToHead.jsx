@@ -27,6 +27,7 @@ export default function HeadToHead() {
   const [records, setRecords] = useState([])
   const [rosters, setRosters] = useState([])
   const [users, setUsers] = useState({})
+  const [weeklyScores, setWeeklyScores] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('total_games')
@@ -45,12 +46,14 @@ export default function HeadToHead() {
       fetch(`${API}/league/${selectedLeagueId}/head-to-head`).then(r => r.json()),
       fetch(`${API}/league/${selectedLeagueId}/rosters`).then(r => r.json()),
       fetch(`${API}/league/${selectedLeagueId}/users`).then(r => r.json()),
-    ]).then(([recordsData, rostersData, usersData]) => {
+      fetch(`${API}/league/${selectedLeagueId}/weekly-scores`).then(r => r.json()),
+    ]).then(([recordsData, rostersData, usersData, weeklyScoresData]) => {
       const userMap = {}
       usersData.forEach(u => userMap[u.user_id] = u)
       setRecords(recordsData)
       setRosters(rostersData)
       setUsers(userMap)
+      setWeeklyScores(weeklyScoresData)
       setLoading(false)
     }).catch(err => {
       setError(err.message)
@@ -114,6 +117,10 @@ export default function HeadToHead() {
       setSortDir('desc')
     }
   }
+
+  const scoresByPoints = [...weeklyScores].sort((a, b) => b.points - a.points)
+  const top10Scores = scoresByPoints.slice(0, 10)
+  const bottom10Scores = scoresByPoints.slice(-10).reverse()
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
@@ -181,6 +188,47 @@ export default function HeadToHead() {
       <p style={{ color: '#666' }}>
         All-time league average score: {pts(leagueAvg)}
       </p>
+
+      <div style={{ display: 'flex', gap: '32px', marginTop: '32px', flexWrap: 'wrap' }}>
+        <ScoreTable title="Top 10 Weekly Scores" rows={top10Scores} />
+        <ScoreTable title="Bottom 10 Weekly Scores" rows={bottom10Scores} />
+      </div>
+    </div>
+  )
+}
+
+function ScoreTable({ title, rows }) {
+  return (
+    <div style={{ flex: '1 1 400px' }}>
+      <h3>{title}</h3>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ background: '#002676' }}>
+            <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
+            <th style={{ padding: '10px', textAlign: 'center' }}>Year</th>
+            <th style={{ padding: '10px', textAlign: 'center' }}>Week</th>
+            <th style={{ padding: '10px', textAlign: 'center' }}>Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            const avatar = teamAvatarUrl(row)
+            return (
+              <tr key={i} style={{ borderBottom: '1px solid #ddd' }}>
+                <td style={{ padding: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {avatar && <img src={avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />}
+                    {teamName(row)}
+                  </div>
+                </td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>{row.season}</td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>{row.week}</td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>{pts(row.points)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
