@@ -172,6 +172,21 @@ def _week_starters(roster, matchup):
     starters = week_starters if week_starters else (roster.starters or [])
     return [s for s in starters if s and s != "0"]
 
+def expected_points_from_stats(db, league, week, starter_ids):
+    """Sum of scoring_expression(league) over the Stat rows for these
+    starter_ids at this league's season/week - "what this roster should
+    have scored" per our own synced stats, regardless of what any
+    already-written Matchup.points says. Shared by recompute_matchup_points
+    (writes this as the live current-season score) and sync_matchups.py's
+    post-import sanity check (compares it against a historical season's
+    frozen Sleeper import, which can go stale - see that check's docstring)."""
+    if not starter_ids:
+        return 0.0
+    return db.query(func.sum(scoring_expression(league))).filter(
+        Stat.season == league.season, Stat.week == week, Stat.season_type == "regular",
+        Stat.player_id.in_(starter_ids),
+    ).scalar() or 0.0
+
 def recompute_matchup_points(db, league, week):
     """Sum each roster's starters' current fantasy points (actual stats,
     same scoring the rest of the app uses) and write the total into that
@@ -187,12 +202,7 @@ def recompute_matchup_points(db, league, week):
     for roster in rosters:
         matchup = matchups.get(roster.roster_id)
         starter_ids = _week_starters(roster, matchup)
-        points = 0.0
-        if starter_ids:
-            points = db.query(func.sum(scoring_expression(league))).filter(
-                Stat.season == league.season, Stat.week == week, Stat.season_type == "regular",
-                Stat.player_id.in_(starter_ids),
-            ).scalar() or 0.0
+        points = expected_points_from_stats(db, league, week, starter_ids)
 
         if matchup:
             matchup.points = points
