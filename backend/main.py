@@ -1056,7 +1056,10 @@ def _refresh_nfl_state():
         resp.raise_for_status()
         state = resp.json()
         week = state.get("week") or week if state.get("season_type") == "regular" else 1
-        season = state.get("season") or season
+        # Sleeper returns season as a string ("2026") - cast so it compares
+        # equal to the plain int `season` every caller passes in (an int
+        # path/query param, or a literal like CURRENT_SEASON elsewhere).
+        season = int(state["season"]) if state.get("season") else season
     except Exception:
         pass
     _nfl_state_cache.update({"computed_at": now, "week": week, "season": season})
