@@ -488,6 +488,16 @@ class PlayerValue(Base):
     trend_30_day = Column(Integer)
     fetched_at = Column(DateTime)
 
+class TeamBye(Base):
+    """An NFL team's single bye week for a season, from Sleeper's real
+    schedule (see sync_schedule.py) - not derivable from Stat rows alone,
+    since a bye week and an individual DNP look identical there (see
+    scoring.position_week_par's per-game-average callers)."""
+    __tablename__ = "team_byes"
+    season = Column(Integer, primary_key=True)
+    team = Column(String, primary_key=True)
+    week = Column(Integer)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 

@@ -28,6 +28,7 @@ export default function Players() {
   const [injuryFilter, setInjuryFilter] = useState('')
   const [sortBy, setSortBy] = useState('points')
   const [sortDir, setSortDir] = useState('desc')
+  const [statMode, setStatMode] = useState('total') // 'total' | 'average'
 
   useEffect(() => {
     const params = selectedLeagueId ? `?league_id=${selectedLeagueId}` : ''
@@ -57,12 +58,18 @@ export default function Players() {
       .catch(() => setSelectedLeague(null))
   }, [selectedLeagueId])
 
+  // The average-mode sort is a different server field (points_avg/par_avg)
+  // from the same column's total-mode sort (points/par) - everything else
+  // (age, value, rank) has only one meaning regardless of this toggle.
+  const AVERAGEABLE_FIELDS = new Set(['points', 'par'])
+  const resolvedSortBy = statMode === 'average' && AVERAGEABLE_FIELDS.has(sortBy) ? `${sortBy}_avg` : sortBy
+
   const loadPlayers = () => {
     setLoading(true)
     setError(null)
 
     const params = new URLSearchParams({
-      limit: String(PAGE_SIZE), season: String(season), sort_by: sortBy, sort_dir: sortDir,
+      limit: String(PAGE_SIZE), season: String(season), sort_by: resolvedSortBy, sort_dir: sortDir,
     })
     if (debouncedSearch) params.set('q', debouncedSearch)
     if (selectedLeagueId) params.set('league_id', selectedLeagueId)
@@ -86,7 +93,7 @@ export default function Players() {
 
   useEffect(loadPlayers, [
     debouncedSearch, selectedLeagueId, filterMode, season,
-    positionFilter, teamFilter, injuryFilter, sortBy, sortDir,
+    positionFilter, teamFilter, injuryFilter, sortBy, sortDir, statMode,
   ])
 
   // Clicking an already-active sort column flips direction; switching to a
@@ -189,6 +196,35 @@ export default function Players() {
             Available Players
           </button>
         </div>
+
+        <div style={{ display: 'inline-flex', border: '1px solid #ccc', borderRadius: '20px', overflow: 'hidden' }}>
+          <button
+            onClick={() => setStatMode('total')}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              border: 'none',
+              cursor: 'pointer',
+              background: statMode === 'total' ? '#93c5fd' : '#1a1a2e',
+              color: statMode === 'total' ? '#1a1a2e' : '#fff',
+            }}
+          >
+            Season Total
+          </button>
+          <button
+            onClick={() => setStatMode('average')}
+            style={{
+              padding: '8px 16px',
+              fontSize: '14px',
+              border: 'none',
+              cursor: 'pointer',
+              background: statMode === 'average' ? '#93c5fd' : '#1a1a2e',
+              color: statMode === 'average' ? '#1a1a2e' : '#fff',
+            }}
+          >
+            Per Game Average
+          </button>
+        </div>
       </div>
 
       {filterMode === 'available' && !selectedLeagueId && (
@@ -216,6 +252,7 @@ export default function Players() {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: 'rgb(155, 157, 157)' }}>
+            <th style={{ padding: '10px', textAlign: 'left' }}>#</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Name</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Position</th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Team</th>
@@ -224,10 +261,10 @@ export default function Players() {
             </th>
             <th style={{ padding: '10px', textAlign: 'left' }}>Injury Status</th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('points')}>
-              {season} Points{sortArrow('points')}
+              {season} Points{statMode === 'average' ? '/Gm' : ''}{sortArrow('points')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('par')}>
-              {season} PAR{sortArrow('par')}
+              {season} PAR{statMode === 'average' ? '/Gm' : ''}{sortArrow('par')}
             </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('redraft_value')}>
               Redraft Value{sortArrow('redraft_value')}
@@ -249,12 +286,13 @@ export default function Players() {
           </tr>
         </thead>
         <tbody>
-          {players.map(p => (
+          {players.map((p, i) => (
             <tr
               key={p.player_id}
               onClick={() => openPlayer(p.player_id)}
               style={{ borderBottom: '1px solid #ddd', cursor: 'pointer' }}
             >
+              <td style={{ padding: '10px', color: '#666' }}>{i + 1}</td>
               <td style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <img
                   src={headshotUrl(p.player_id)}
@@ -270,8 +308,16 @@ export default function Players() {
               <td style={{ padding: '10px', color: p.injury_status ? 'red' : 'green' }}>
                 {p.injury_status || 'Active'}
               </td>
-              <td style={{ padding: '10px' }}>{(p.points || 0).toFixed(1)}</td>
-              <td style={{ padding: '10px' }}>{p.par != null ? p.par.toFixed(1) : '-'}</td>
+              <td style={{ padding: '10px' }}>
+                {(statMode === 'average' ? p.points_avg : p.points) != null
+                  ? (statMode === 'average' ? p.points_avg : p.points).toFixed(1)
+                  : '-'}
+              </td>
+              <td style={{ padding: '10px' }}>
+                {(statMode === 'average' ? p.par_avg : p.par) != null
+                  ? (statMode === 'average' ? p.par_avg : p.par).toFixed(1)
+                  : '-'}
+              </td>
               <td style={{ padding: '10px' }}>{p.redraft_value ?? '-'}</td>
               <td style={{ padding: '10px' }}>{p.redraft_position_rank != null ? `${p.position}${p.redraft_position_rank}` : '-'}</td>
               {selectedLeague?.league_type === 'dynasty' && (

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue
+from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue, TeamBye
 from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts, rescaled_trade_values, is_current_season
 
 app = FastAPI()
@@ -91,6 +91,36 @@ def season_points(db, league, season):
     points = {player_id: pts or 0 for player_id, pts in rows}
     _points_cache[cache_key] = {"computed_at": now, "points": points}
     return points
+
+_participation_cache = {}
+
+def season_participation(db, season):
+    """Per-player count of weeks with gp==1 (real recorded participation,
+    any position - gp is the one field that reliably flips to 1 whenever a
+    player actually produced stats that week, checked across QB/RB/WR/TE/K/
+    DEF) for the season, plus the raw per-(player,week) gp lookup. Cached
+    the same way as season_points. Used for the players page's per-game-
+    average toggle: a week with no real participation (OUT, IR, 0% snaps,
+    or a bye - all indistinguishable here, see TeamBye for the one place
+    that distinction actually matters) doesn't count as a game played."""
+    cached = _participation_cache.get(season)
+    now = time.time()
+    if cached and now - cached["computed_at"] < CACHE_TTL_SECONDS:
+        return cached["games_played"], cached["gp_by_week"]
+
+    rows = (
+        db.query(Stat.player_id, Stat.week, Stat.gp)
+        .filter(Stat.season == season, Stat.season_type == "regular", Stat.week != 18)
+        .all()
+    )
+    games_played = {}
+    gp_by_week = {}
+    for player_id, week, gp in rows:
+        if gp == 1:
+            games_played[player_id] = games_played.get(player_id, 0) + 1
+        gp_by_week[(player_id, week)] = gp
+    _participation_cache[season] = {"computed_at": now, "games_played": games_played, "gp_by_week": gp_by_week}
+    return games_played, gp_by_week
 
 def position_week_ranks(db, league, season, position):
     """Per-player weekly rank at `position` for the season (1 = highest score that
@@ -246,13 +276,52 @@ def browse_players(
         weekly = par_by_position.get(p.position, {}).get(p.player_id)
         return sum(weekly.values()) if weekly else None
 
-    # A missing rank/PAR sorts as worse than every real one in both
-    # directions (last under ascending "best first", first under
+    # Per-game averages for the points/PAR columns' total-vs-average
+    # toggle. Points-per-game divides by games_played (any week with
+    # gp==1, any position) - OUT/IR/0%-snaps/bye all look identical in the
+    # data (see season_participation) so they're excluded uniformly, same
+    # grouping the user wants for this average. PAR-per-game instead wants
+    # every week counted except a real bye, injured or not - the one place
+    # that distinction needs TeamBye's real schedule data rather than the
+    # Stat table alone, and only it needs last_complete_week's cap (points
+    # itself, and games_played, already only ever contain weeks that have
+    # actually happened).
+    games_played, gp_by_week = season_participation(db, season)
+    team_byes = dict(db.query(TeamBye.team, TeamBye.week).filter(TeamBye.season == season).all())
+    complete_week = last_complete_week(season)
+    par_max_week = max(complete_week if complete_week is not None else 17, 0)
+
+    def par_games_count(p):
+        count = par_max_week
+        bye = team_byes.get(p.team)
+        # Only exclude the bye if the player's own data agrees they didn't
+        # play it - Player.team is current, not historical, so a traded
+        # player's resolved "bye" can be wrong; when it is, their real
+        # stats for that week say so and it's left in the count instead.
+        if bye is not None and bye <= par_max_week and gp_by_week.get((p.player_id, bye)) != 1:
+            count -= 1
+        return count
+
+    def points_avg(p):
+        gp_count = games_played.get(p.player_id, 0)
+        return (points.get(p.player_id, 0) or 0) / gp_count if gp_count > 0 else None
+
+    def par_avg(p):
+        par_total = player_par(p)
+        if par_total is None:
+            return None
+        count = par_games_count(p)
+        return par_total / count if count > 0 else None
+
+    # A missing rank/PAR/average sorts as worse than every real one in
+    # both directions (last under ascending "best first", first under
     # descending "worst first").
     SORT_KEYS = {
         "points": lambda p: points.get(p.player_id, 0) or 0,
         "age": lambda p: p.age if p.age is not None else -1,
         "par": lambda p: player_par(p) if player_par(p) is not None else -999999,
+        "points_avg": lambda p: points_avg(p) if points_avg(p) is not None else -999999,
+        "par_avg": lambda p: par_avg(p) if par_avg(p) is not None else -999999,
         "redraft_value": lambda p: redraft_values.get(p.player_id, 0) or 0,
         "redraft_rank": lambda p: redraft_ranks.get(p.player_id) or 999999,
         "dynasty_value": lambda p: dynasty_values.get(p.player_id, 0) or 0,
@@ -267,6 +336,8 @@ def browse_players(
         data = player_to_dict(player)
         data["points"] = points.get(player.player_id, 0)
         data["par"] = player_par(player)
+        data["points_avg"] = points_avg(player)
+        data["par_avg"] = par_avg(player)
         data["redraft_value"] = redraft_values.get(player.player_id)
         data["redraft_position_rank"] = redraft_ranks.get(player.player_id)
         data["dynasty_value"] = dynasty_values.get(player.player_id) if include_dynasty else None
