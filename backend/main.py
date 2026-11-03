@@ -234,13 +234,25 @@ def browse_players(
     redraft_ranks = {player_id: rank for player_id, is_dynasty, rank in value_rows if not is_dynasty}
     dynasty_ranks = {player_id: rank for player_id, is_dynasty, rank in value_rows if is_dynasty}
 
-    # A missing rank sorts as worse than every real one in both
+    # One position_week_par call per distinct position among the
+    # candidates, not one per player - same batching get_points_above_
+    # replacement_totals already uses for the draft page. Empty (no PAR)
+    # for any position it doesn't cover (K/DEF/IDP) or with no league
+    # selected (replacement level needs a league's roster_positions).
+    positions_present = {p.position for p in candidates if p.position}
+    par_by_position = {pos: cached_position_week_par(db, league, season, pos) for pos in positions_present}
+
+    def player_par(p):
+        weekly = par_by_position.get(p.position, {}).get(p.player_id)
+        return sum(weekly.values()) if weekly else None
+
+    # A missing rank/PAR sorts as worse than every real one in both
     # directions (last under ascending "best first", first under
-    # descending "worst first") - same idea as PAR ranking an
-    # unranked player below everyone with a real rank.
+    # descending "worst first").
     SORT_KEYS = {
         "points": lambda p: points.get(p.player_id, 0) or 0,
         "age": lambda p: p.age if p.age is not None else -1,
+        "par": lambda p: player_par(p) if player_par(p) is not None else -999999,
         "redraft_value": lambda p: redraft_values.get(p.player_id, 0) or 0,
         "redraft_rank": lambda p: redraft_ranks.get(p.player_id) or 999999,
         "dynasty_value": lambda p: dynasty_values.get(p.player_id, 0) or 0,
@@ -254,6 +266,7 @@ def browse_players(
     for player in ranked[offset:offset + limit]:
         data = player_to_dict(player)
         data["points"] = points.get(player.player_id, 0)
+        data["par"] = player_par(player)
         data["redraft_value"] = redraft_values.get(player.player_id)
         data["redraft_position_rank"] = redraft_ranks.get(player.player_id)
         data["dynasty_value"] = dynasty_values.get(player.player_id) if include_dynasty else None
@@ -263,16 +276,27 @@ def browse_players(
     return {"total": total, "players": page}
 
 @app.get("/players/filter-options")
-def get_player_filter_options(db: Session = Depends(get_db)):
+def get_player_filter_options(league_id: str | None = None, db: Session = Depends(get_db)):
     """Distinct position/team/injury-status values actually present among
     active players, for the players page's filter dropdowns - computed
     live rather than hardcoded, since guessing team abbreviations (a
     relocated franchise, a legacy code like 'OAK' still on old rows) or
     every position Sleeper tracks (offensive line splits, IDP, etc.) is
-    exactly the kind of thing that quietly goes stale."""
+    exactly the kind of thing that quietly goes stale. With a league_id,
+    positions is further narrowed to that league's actual starter-eligible
+    positions (same eligible_positions_for_roster rule /players/browse
+    itself filters by) - no point offering a position in the dropdown that
+    the browse results can never contain for that league."""
     positions = sorted(p for (p,) in db.query(Player.position).filter(Player.active == True, Player.position.isnot(None)).distinct().all() if p)
     teams = sorted(t for (t,) in db.query(Player.team).filter(Player.active == True, Player.team.isnot(None)).distinct().all() if t)
     statuses = sorted(s for (s,) in db.query(Player.injury_status).filter(Player.active == True, Player.injury_status.isnot(None)).distinct().all() if s)
+
+    league = db.query(League).filter(League.league_id == league_id).first() if league_id else None
+    if league and league.roster_positions:
+        eligible = eligible_positions_for_roster(json.loads(league.roster_positions))
+        if eligible:
+            positions = [p for p in positions if p in eligible]
+
     return {"positions": positions, "teams": teams, "injury_statuses": statuses}
 
 @app.get("/players/values")

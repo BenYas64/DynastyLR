@@ -30,11 +30,16 @@ export default function Players() {
   const [sortDir, setSortDir] = useState('desc')
 
   useEffect(() => {
-    fetch(`${API}/players/filter-options`)
+    const params = selectedLeagueId ? `?league_id=${selectedLeagueId}` : ''
+    fetch(`${API}/players/filter-options${params}`)
       .then(r => r.json())
       .then(setFilterOptions)
       .catch(() => {})
-  }, [])
+    // A position picked under one league's dropdown may not exist in
+    // another's (no K slot, no IDP, etc.) - drop it rather than leave an
+    // invalid filter silently selected.
+    setPositionFilter('')
+  }, [selectedLeagueId])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -132,6 +137,7 @@ export default function Players() {
         {selectedLeague?.scoring_settings
           ? `${season} points use ${selectedLeague.name}'s scoring settings.`
           : `Showing standard PPR points for ${season}. Sign in and select a league on the Account page for that league's scoring.`}
+        {!selectedLeague && ' PAR needs a selected league too, and shows as "-" until one is chosen.'}
       </p>
 
       <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '20px' }}>
@@ -220,6 +226,9 @@ export default function Players() {
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('points')}>
               {season} Points{sortArrow('points')}
             </th>
+            <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('par')}>
+              {season} PAR{sortArrow('par')}
+            </th>
             <th style={{ padding: '10px', textAlign: 'left', cursor: 'pointer' }} onClick={() => handleSort('redraft_value')}>
               Redraft Value{sortArrow('redraft_value')}
             </th>
@@ -262,6 +271,7 @@ export default function Players() {
                 {p.injury_status || 'Active'}
               </td>
               <td style={{ padding: '10px' }}>{(p.points || 0).toFixed(1)}</td>
+              <td style={{ padding: '10px' }}>{p.par != null ? p.par.toFixed(1) : '-'}</td>
               <td style={{ padding: '10px' }}>{p.redraft_value ?? '-'}</td>
               <td style={{ padding: '10px' }}>{p.redraft_position_rank != null ? `${p.position}${p.redraft_position_rank}` : '-'}</td>
               {selectedLeague?.league_type === 'dynasty' && (
