@@ -754,9 +754,15 @@ def get_weekly_scores(league_id: str, db: Session = Depends(get_db)):
     )
     matchups = paired_matchups(matchups)
 
+    # is_current_season runs a query of its own - resolve it once per
+    # chain entry (a handful of seasons), not once per matchup row (this
+    # league's full history, hundreds+ of rows), which was timing out the
+    # whole request.
+    is_current_by_league = {lid: is_current_season(db, l) for lid, l in chain.items()}
+
     def is_not_yet_complete(m):
         league = chain[m.league_id]
-        if not is_current_season(db, league):
+        if not is_current_by_league[m.league_id]:
             return False
         complete_week = last_complete_week(league.season)
         return complete_week is not None and m.week > complete_week
