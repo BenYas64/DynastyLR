@@ -406,6 +406,11 @@ class League(Base):
     # players. Redraft value always shows regardless of this; dynasty value
     # only shows additionally when this is "dynasty".
     league_type = Column(String)
+    # Sleeper settings.draft_rounds - how many rounds this league's draft
+    # runs, used to know how many future-season picks a team has by default
+    # (see TradedPick/sync_traded_picks.py) since Sleeper's traded_picks
+    # endpoint only lists picks that moved, not every pick that exists.
+    draft_rounds = Column(Integer)
 
 class Roster(Base):
     __tablename__ = "rosters"
@@ -487,6 +492,21 @@ class PlayerValue(Base):
     position_rank = Column(Integer)
     trend_30_day = Column(Integer)
     fetched_at = Column(DateTime)
+
+class TradedPick(Base):
+    """A future draft pick that has moved from its original team, synced
+    from Sleeper's /league/{league_id}/traded_picks (see
+    sync_traded_picks.py). Sleeper only returns deviations from default
+    ownership - a (league_id, season, round, roster_id) combo NOT in this
+    table is still owned by roster_id itself. Only synced for each dynasty
+    chain's current/active league_id (see scoring.is_current_season), since
+    that's the only league_id Sleeper keeps this up to date for."""
+    __tablename__ = "traded_picks"
+    league_id = Column(String, primary_key=True)
+    season = Column(Integer, primary_key=True)
+    round = Column(Integer, primary_key=True)
+    roster_id = Column(Integer, primary_key=True)  # original owner of the pick
+    owner_id = Column(Integer)  # current owner (roster_id)
 
 class TeamBye(Base):
     """An NFL team's single bye week for a season, from Sleeper's real

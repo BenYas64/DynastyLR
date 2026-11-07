@@ -56,6 +56,7 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 playoff_week_start=data.get("settings", {}).get("playoff_week_start"),
                 previous_league_id=data.get("previous_league_id"),
                 league_median=False,
+                draft_rounds=data.get("settings", {}).get("draft_rounds"),
                 value_ppr=nearest_value_tier(scoring.get("rec")),
                 value_tep=nearest_value_tier(scoring.get("bonus_rec_te")),
                 league_type=default_league_type(data.get("name")),
@@ -88,6 +89,7 @@ def sync_leagues():
             league.scoring_settings = json.dumps(scoring)
             league.roster_positions = json.dumps(data.get("roster_positions"))
             league.playoff_week_start = data.get("settings", {}).get("playoff_week_start")
+            league.draft_rounds = data.get("settings", {}).get("draft_rounds")
             # Only fill these in if unset - a commissioner's own choice (via
             # the value-settings page) should never get silently overwritten
             # by a routine sync just because scoring_settings was re-fetched.

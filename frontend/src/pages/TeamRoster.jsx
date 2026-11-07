@@ -16,6 +16,7 @@ export default function TeamRoster() {
   const [week, setWeek] = useState(null)
   const [weekData, setWeekData] = useState(null)
   const [players, setPlayers] = useState({})
+  const [futurePicks, setFuturePicks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -26,7 +27,8 @@ export default function TeamRoster() {
       fetch(`${API}/league/${leagueId}/rosters`).then(r => r.json()),
       fetch(`${API}/league/${leagueId}/users`).then(r => r.json()),
       fetch(`${API}/current-week`).then(r => r.json()),
-    ]).then(([rosters, users, currentWeek]) => {
+      fetch(`${API}/league/${leagueId}/roster/${rosterId}/future-picks`).then(r => r.json()),
+    ]).then(([rosters, users, currentWeek, picks]) => {
       const myRoster = rosters.find(r => String(r.roster_id) === rosterId)
       if (!myRoster) throw new Error('Roster not found')
       const userMap = {}
@@ -34,6 +36,7 @@ export default function TeamRoster() {
 
       setRoster(myRoster)
       setOwner(userMap[myRoster.owner_id] || null)
+      setFuturePicks(picks)
       setWeek(currentWeek.week)
     }).catch(err => {
       setError(err.message)
@@ -134,6 +137,7 @@ export default function TeamRoster() {
           userId={user?.user_id}
           week={week}
           onMoved={load}
+          futurePicks={futurePicks}
         />
       )}
     </div>

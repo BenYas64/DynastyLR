@@ -12,6 +12,7 @@ export default function MyTeam() {
   const [week, setWeek] = useState(null)
   const [weekData, setWeekData] = useState(null)
   const [players, setPlayers] = useState({})
+  const [futurePicks, setFuturePicks] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -27,6 +28,11 @@ export default function MyTeam() {
       const myRoster = rosters.find(r => r.owner_id === user.user_id)
       setRoster(myRoster || null)
       setWeek(currentWeek.week)
+      if (myRoster) {
+        fetch(`${API}/league/${selectedLeagueId}/roster/${myRoster.roster_id}/future-picks`)
+          .then(r => r.json())
+          .then(setFuturePicks)
+      }
     })
   }, [user, selectedLeagueId])
 
@@ -129,6 +135,7 @@ export default function MyTeam() {
           onMoved={load}
           weekPoints={weekData.week_points}
           weekProjections={weekData.week_projections}
+          futurePicks={futurePicks}
         />
       )}
     </div>

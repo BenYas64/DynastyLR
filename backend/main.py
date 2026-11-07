@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue, TeamBye
+from database import get_db, Player, Stat, Projection, User, League, Roster, LeagueUser, Matchup, BracketMatchup, DraftPick, PlayerValue, TeamBye, TradedPick
 from scoring import scoring_expression, NON_STAT_COLUMNS, position_week_par, replacement_starter_counts, rescaled_trade_values, is_current_season
 
 app = FastAPI()
@@ -1442,6 +1442,64 @@ def get_draft(league_id: str, db: Session = Depends(get_db)):
         }
         for p in rows
     ]
+
+# How many upcoming draft classes to show on a roster page - Sleeper's
+# traded_picks data goes out further than this for leagues with active
+# future-pick trading, but showing every season forever would just be a
+# wall of untraded, unremarkable "owns their own pick" rows.
+FUTURE_DRAFT_SEASONS = 2
+
+@app.get("/league/{league_id}/roster/{roster_id}/future-picks")
+def get_future_picks(league_id: str, roster_id: int, db: Session = Depends(get_db)):
+    """Every future draft pick `roster_id` currently owns, across the next
+    FUTURE_DRAFT_SEASONS draft classes - both their own picks and any
+    they've acquired in trades. Sleeper's traded_picks only lists picks that
+    moved from their original owner, so every (season, round, roster) not
+    in TradedPick is assumed still owned by that roster itself."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    # Only the active league in a dynasty chain has up-to-date trade data -
+    # a historical season's picks have long since been drafted.
+    if not is_current_season(db, league) or not league.season or not league.draft_rounds:
+        return []
+
+    seasons = [league.season + i for i in range(1, FUTURE_DRAFT_SEASONS + 1)]
+
+    traded = (
+        db.query(TradedPick)
+        .filter(TradedPick.league_id == league_id, TradedPick.season.in_(seasons))
+        .all()
+    )
+    owner_override = {(t.season, t.round, t.roster_id): t.owner_id for t in traded}
+
+    rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
+    roster_ids = [r.roster_id for r in rosters]
+
+    users = db.query(LeagueUser).filter(LeagueUser.league_id == league_id).all()
+    user_by_id = {u.user_id: u for u in users}
+    owner_user_by_roster = {r.roster_id: user_by_id.get(r.owner_id) for r in rosters}
+
+    def team_label(rid):
+        u = owner_user_by_roster.get(rid)
+        return (u and (u.team_name or u.display_name)) or "Unknown"
+
+    picks = []
+    for season in seasons:
+        for rnd in range(1, league.draft_rounds + 1):
+            for original_rid in roster_ids:
+                current_owner = owner_override.get((season, rnd, original_rid), original_rid)
+                if current_owner != roster_id:
+                    continue
+                picks.append({
+                    "season": season,
+                    "round": rnd,
+                    "original_team_name": None if original_rid == roster_id else team_label(original_rid),
+                })
+
+    picks.sort(key=lambda p: (p["season"], p["round"]))
+    return picks
 
 @app.get("/league/{league_id}/users")
 def get_users(league_id: str, db: Session = Depends(get_db)):

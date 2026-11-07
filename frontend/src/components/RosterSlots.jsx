@@ -146,6 +146,18 @@ function computeOptimalLineup(starterSlots, roster, players, pointsFor, hasActua
 const SECTION_LABELS = {
   starter: 'Starters',
   bench: 'Bench',
+  picks: 'Draft Picks',
+}
+
+function ordinal(n) {
+  const suffixes = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0])
+}
+
+function pickLabel(pick) {
+  const base = `${pick.season} ${ordinal(pick.round)}`
+  return pick.original_team_name ? `${base} (${pick.original_team_name})` : base
 }
 
 const optimizeButtonStyle = {
@@ -178,7 +190,7 @@ function slotChipStyle(slot, overflow, extra) {
 export default function RosterSlots({
   rosterPositions, starters, allPlayers, playersMap,
   editable, leagueId, userId, week, onMoved,
-  weekPoints, weekProjections,
+  weekPoints, weekProjections, futurePicks,
 }) {
   const { openPlayer } = usePlayerModal()
   const [pickerRow, setPickerRow] = useState(null)
@@ -400,6 +412,37 @@ export default function RosterSlots({
           </div>
         )
       })}
+
+      {futurePicks && futurePicks.length > 0 && (
+        <div>
+          <div style={{ margin: '20px 0 8px' }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: '14px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                color: '#666',
+              }}
+            >
+              {SECTION_LABELS.picks}
+            </h3>
+          </div>
+          {futurePicks.map((pick, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px 0',
+                borderBottom: '1px solid #eee',
+              }}
+            >
+              <span>{pickLabel(pick)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {pickerRowData && (
         <>
