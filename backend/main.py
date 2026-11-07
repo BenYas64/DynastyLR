@@ -885,6 +885,40 @@ def update_value_settings(league_id: str, payload: ValueSettingsUpdate, db: Sess
         "league_type": league.league_type,
     }
 
+MAX_FUTURE_DRAFT_SEASONS = 10
+
+class FuturePicksSettingsUpdate(BaseModel):
+    user_id: str
+    future_draft_seasons: int
+
+@app.put("/league/{league_id}/future-picks-settings")
+def update_future_picks_settings(league_id: str, payload: FuturePicksSettingsUpdate, db: Session = Depends(get_db)):
+    """How many upcoming draft classes get_future_picks shows on a roster
+    page - defaulted by sync_leagues.py (3 for dynasty, 0 for redraft) but
+    editable per-league same as any other commissioner setting."""
+    league = db.query(League).filter(League.league_id == league_id).first()
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    membership = db.query(LeagueUser).filter(
+        LeagueUser.league_id == league_id,
+        LeagueUser.user_id == payload.user_id,
+    ).first()
+    if not membership or not membership.commish:
+        raise HTTPException(status_code=403, detail="Only the league commissioner can edit this setting")
+
+    is_superseded = db.query(League).filter(League.previous_league_id == league_id).first() is not None
+    if is_superseded:
+        raise HTTPException(status_code=403, detail="Settings for past seasons cannot be edited")
+
+    if not (0 <= payload.future_draft_seasons <= MAX_FUTURE_DRAFT_SEASONS):
+        raise HTTPException(status_code=400, detail=f"future_draft_seasons must be between 0 and {MAX_FUTURE_DRAFT_SEASONS}")
+
+    league.future_draft_seasons = payload.future_draft_seasons
+    db.commit()
+
+    return {"league_id": league_id, "future_draft_seasons": league.future_draft_seasons}
+
 # Canonical slot order the roster-positions editor writes back in. BN entries
 # can sit anywhere in the array without affecting starter-slot indexing (slot
 # rows are filtered out and re-derived from this only by count elsewhere), so
@@ -1443,29 +1477,26 @@ def get_draft(league_id: str, db: Session = Depends(get_db)):
         for p in rows
     ]
 
-# How many upcoming draft classes to show on a roster page - Sleeper's
-# traded_picks data goes out further than this for leagues with active
-# future-pick trading, but showing every season forever would just be a
-# wall of untraded, unremarkable "owns their own pick" rows.
-FUTURE_DRAFT_SEASONS = 2
-
 @app.get("/league/{league_id}/roster/{roster_id}/future-picks")
 def get_future_picks(league_id: str, roster_id: int, db: Session = Depends(get_db)):
     """Every future draft pick `roster_id` currently owns, across the next
-    FUTURE_DRAFT_SEASONS draft classes - both their own picks and any
-    they've acquired in trades. Sleeper's traded_picks only lists picks that
-    moved from their original owner, so every (season, round, roster) not
-    in TradedPick is assumed still owned by that roster itself."""
+    league.future_draft_seasons draft classes (commissioner-editable, see
+    update_future_picks_settings - defaults to 3 for a dynasty league, 0 for
+    redraft) - both their own picks and any they've acquired in trades.
+    Sleeper's traded_picks only lists picks that moved from their original
+    owner, so every (season, round, roster) not in TradedPick is assumed
+    still owned by that roster itself."""
     league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
 
     # Only the active league in a dynasty chain has up-to-date trade data -
     # a historical season's picks have long since been drafted.
-    if not is_current_season(db, league) or not league.season or not league.draft_rounds:
+    future_draft_seasons = league.future_draft_seasons if league.future_draft_seasons is not None else 3
+    if not is_current_season(db, league) or not league.season or not league.draft_rounds or future_draft_seasons <= 0:
         return []
 
-    seasons = [league.season + i for i in range(1, FUTURE_DRAFT_SEASONS + 1)]
+    seasons = [league.season + i for i in range(1, future_draft_seasons + 1)]
 
     traded = (
         db.query(TradedPick)

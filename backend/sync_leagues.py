@@ -21,6 +21,9 @@ def nearest_value_tier(weight):
 def default_league_type(name):
     return "dynasty" if "wcxc" in (name or "").lower() else "redraft"
 
+def default_future_draft_seasons(league_type):
+    return 3 if league_type == "dynasty" else 0
+
 def discover_leagues(season, user_id=BEN_USER_ID):
     """Adds any of this user's leagues for `season` that aren't in the
     leagues table yet - a season rollover or a brand new league both show up
@@ -44,6 +47,7 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 continue
             data = detail_resp.json()
             scoring = data.get("scoring_settings") or {}
+            league_type = default_league_type(data.get("name"))
 
             db.add(League(
                 league_id=league_id,
@@ -59,7 +63,8 @@ def discover_leagues(season, user_id=BEN_USER_ID):
                 draft_rounds=data.get("settings", {}).get("draft_rounds"),
                 value_ppr=nearest_value_tier(scoring.get("rec")),
                 value_tep=nearest_value_tier(scoring.get("bonus_rec_te")),
-                league_type=default_league_type(data.get("name")),
+                league_type=league_type,
+                future_draft_seasons=default_future_draft_seasons(league_type),
             ))
             db.commit()
             added += 1
@@ -99,6 +104,8 @@ def sync_leagues():
                 league.value_tep = nearest_value_tier(scoring.get("bonus_rec_te"))
             if league.league_type is None:
                 league.league_type = default_league_type(data.get("name"))
+            if league.future_draft_seasons is None:
+                league.future_draft_seasons = default_future_draft_seasons(league.league_type)
             db.commit()
             print(f"{league_id}: {data.get('name')} updated")
 

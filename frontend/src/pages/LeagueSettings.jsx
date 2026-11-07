@@ -50,6 +50,21 @@ export default function LeagueSettings() {
             Value Settings
           </button>
         </Link>
+        <Link to="/league-settings/draft-picks" style={{ textDecoration: 'none' }}>
+          <button
+            style={{
+              padding: '10px 24px',
+              fontSize: '16px',
+              background: '#1a1a2e',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            Draft Pick Settings
+          </button>
+        </Link>
       </div>
     </div>
   )

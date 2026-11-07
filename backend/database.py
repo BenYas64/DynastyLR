@@ -411,6 +411,11 @@ class League(Base):
     # (see TradedPick/sync_traded_picks.py) since Sleeper's traded_picks
     # endpoint only lists picks that moved, not every pick that exists.
     draft_rounds = Column(Integer)
+    # How many upcoming draft classes to show on a roster page (see
+    # main.py's get_future_picks). Defaulted by sync_leagues.py to 3 for a
+    # dynasty league, 0 for redraft (no persistent future picks to show),
+    # but editable per-league like any other setting here.
+    future_draft_seasons = Column(Integer)
 
 class Roster(Base):
     __tablename__ = "rosters"
